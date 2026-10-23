@@ -3,7 +3,7 @@ import { ArrowLeft, Pause, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { isAvailable } from "@/catalog";
@@ -62,7 +62,9 @@ function MapView({ city, cities }: { city: CityEntry; cities: CityEntry[] }) {
         <Select value={city.id} onValueChange={(id) => { location.search = `?city=${encodeURIComponent(id)}`; }}>
           <SelectTrigger size="sm" aria-label="Map"><SelectValue /></SelectTrigger>
           <SelectContent>
-            {cities.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+            <SelectGroup>
+              {cities.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+            </SelectGroup>
           </SelectContent>
         </Select>
         <ToggleGroup

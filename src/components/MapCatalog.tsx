@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldLabel } from "@/components/ui/field";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { distinct, isAvailable, MAP_TYPE_LABELS, matches, sortEntries, type Filters, type SortDir, type SortKey } from "@/catalog";
 import { cn } from "@/lib/utils";
 import type { CityEntry, MapType } from "@/schema";
@@ -45,8 +45,10 @@ function FilterSelect({ id, label, allLabel, hint = allLabel, value, options, on
       >
         <SelectTrigger id={id}><SelectValue placeholder={hint} /></SelectTrigger>
         <SelectContent>
-          <SelectItem value={ALL}>{allLabel}</SelectItem>
-          {options.map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+          <SelectGroup>
+            <SelectItem value={ALL}>{allLabel}</SelectItem>
+            {options.map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+          </SelectGroup>
         </SelectContent>
       </Select>
     </Field>
@@ -125,7 +127,9 @@ export function MapCatalog({ entries }: { entries: CityEntry[] }) {
             <Select value={sort} onValueChange={setSort}>
               <SelectTrigger id="sort"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {SORTS.map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                <SelectGroup>
+                  {SORTS.map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                </SelectGroup>
               </SelectContent>
             </Select>
           </Field>
