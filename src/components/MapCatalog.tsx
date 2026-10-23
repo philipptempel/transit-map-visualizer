@@ -3,7 +3,7 @@ import { ArrowRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { distinct, isAvailable, MAP_TYPE_LABELS, matches, sortEntries, type Filters, type SortDir, type SortKey } from "@/catalog";
 import { cn } from "@/lib/utils";
@@ -36,20 +36,20 @@ interface FilterSelectProps {
 function FilterSelect({ id, label, allLabel, hint = allLabel, value, options, onChange }: FilterSelectProps) {
   const disabled = options.length === 0;
   return (
-    <div className="flex flex-col gap-1.5">
-      <Label htmlFor={id} className="text-xs text-muted-foreground">{label}</Label>
+    <Field className="gap-1.5" data-disabled={disabled || undefined}>
+      <FieldLabel htmlFor={id} className="text-xs text-muted-foreground">{label}</FieldLabel>
       <Select
         disabled={disabled}
         value={disabled ? "" : (value ?? ALL)}
         onValueChange={(v) => onChange(v === ALL ? undefined : v)}
       >
-        <SelectTrigger id={id} className="w-full"><SelectValue placeholder={hint} /></SelectTrigger>
+        <SelectTrigger id={id}><SelectValue placeholder={hint} /></SelectTrigger>
         <SelectContent>
           <SelectItem value={ALL}>{allLabel}</SelectItem>
           {options.map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
         </SelectContent>
       </Select>
-    </div>
+    </Field>
   );
 }
 
@@ -120,15 +120,15 @@ export function MapCatalog({ entries }: { entries: CityEntry[] }) {
 
       <Card size="sm" className="mt-4">
         <CardContent className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="sort" className="text-xs text-muted-foreground">Sort by</Label>
+          <Field className="gap-1.5">
+            <FieldLabel htmlFor="sort" className="text-xs text-muted-foreground">Sort by</FieldLabel>
             <Select value={sort} onValueChange={setSort}>
-              <SelectTrigger id="sort" className="w-full"><SelectValue /></SelectTrigger>
+              <SelectTrigger id="sort"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {SORTS.map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
               </SelectContent>
             </Select>
-          </div>
+          </Field>
           <FilterSelect id="f-type" label="Type" allLabel="All types" options={menus.types}
             value={f.type} onChange={(v) => setF({ ...f, type: v as MapType | undefined })} />
           {/* Changing a level clears the levels below it. */}

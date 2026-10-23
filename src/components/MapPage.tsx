@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Pause, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
+import { Field, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -72,17 +72,18 @@ function MapView({ city, cities }: { city: CityEntry; cities: CityEntry[] }) {
           <ToggleGroupItem value="geo" className="px-3">Geographic</ToggleGroupItem>
           <ToggleGroupItem value="sch" className="px-3">Schematic</ToggleGroupItem>
         </ToggleGroup>
-        <div id="groups" className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1">
+        <FieldSet id="groups" className="flex-row flex-wrap items-center gap-x-4 gap-y-1 px-1">
+          <FieldLegend className="sr-only">Modes</FieldLegend>
           {groups.map((gd) => (
-            <div key={gd.id} className="flex items-center gap-2">
+            <Field key={gd.id} orientation="horizontal" className="w-auto gap-2">
               <Checkbox
                 id={`g-${gd.id}`} checked={gd.on}
                 onCheckedChange={(v) => { r?.toggle(gd.id, v === true); setGroups(r?.groups() ?? []); }}
               />
-              <Label htmlFor={`g-${gd.id}`} className="font-normal">{gd.label}</Label>
-            </div>
+              <FieldLabel htmlFor={`g-${gd.id}`} className="font-normal">{gd.label}</FieldLabel>
+            </Field>
           ))}
-        </div>
+        </FieldSet>
       </header>
 
       <canvas ref={canvas} id="map" className="block h-full min-h-0 w-full touch-none bg-[#faf8f4]" />
