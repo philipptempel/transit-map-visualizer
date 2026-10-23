@@ -57,7 +57,7 @@ function MapView({ city, cities }: { city: CityEntry; cities: CityEntry[] }) {
     <div className="grid h-dvh grid-rows-[auto_1fr_auto] text-sm">
       <header className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
         <Button variant="outline" size="sm" asChild>
-          <a href="./"><ArrowLeft /> All maps</a>
+          <a href="./"><ArrowLeft data-icon="inline-start" /> All maps</a>
         </Button>
         <Select value={city.id} onValueChange={(id) => { location.search = `?city=${encodeURIComponent(id)}`; }}>
           <SelectTrigger size="sm" aria-label="Map"><SelectValue /></SelectTrigger>
@@ -93,7 +93,7 @@ function MapView({ city, cities }: { city: CityEntry; cities: CityEntry[] }) {
       <footer className="flex flex-wrap items-center gap-3 border-t px-3 py-2">
         <Button id="play" variant="outline" size="sm" className="w-24" disabled={!snap}
           onClick={() => (r?.state.playing ? r.pause() : r?.play())}>
-          {snap?.playing ? <><Pause /> Pause</> : <><Play /> Play</>}
+          {snap?.playing ? <><Pause data-icon="inline-start" /> Pause</> : <><Play data-icon="inline-start" /> Play</>}
         </Button>
         <span id="year" className="min-w-[4ch] text-3xl font-semibold tabular-nums">{snap ? year : ""}</span>
         <Slider
