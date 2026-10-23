@@ -2,8 +2,8 @@
 
 import { readFileSync } from "node:fs";
 import type { Plugin } from "vite";
-import { isAvailable } from "../src/catalog";
-import type { CityEntry } from "../src/schema";
+import { isAvailable } from "../src/catalog.ts";
+import type { CityEntry } from "../src/schema.ts";
 
 const CATALOG = "public/data/cities.json";
 const CITY_PATH = /^\/map\/([^/?#]+)\.html(?:[?#]|$)/;

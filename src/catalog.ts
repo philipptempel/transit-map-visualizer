@@ -1,6 +1,6 @@
 // Filtering and sorting of the map catalog shown on the landing page.
 
-import type { CityEntry, MapType } from "./schema";
+import type { CityEntry, MapType } from "./schema.ts";
 
 export type SortKey = "name" | "created" | "updated";
 export type SortDir = "asc" | "desc";
