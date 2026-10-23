@@ -69,20 +69,32 @@ things through typed services; for example `network` provides `stop(id)` so
 that `landmarks` can pin a landmark to a station as the map morphs. A plugin
 that throws is logged and skipped rather than taking the whole map down.
 
-The pages are styled with [Tailwind CSS] v4; the few shared component
-classes (`.btn`, `.field`) live in `src/style.css`. Both follow the system's
-light or dark setting.
+The renderer and plugins are plain TypeScript and know nothing about the UI
+around them. The pages are [React] with [shadcn/ui] components on
+[Tailwind CSS] v4, and follow the system's light or dark setting. React only
+mirrors the renderer's state in the controls; it never redraws the map.
+
+shadcn/ui components are source files that live in the repo, in
+`src/components/ui/`, and can be edited like any other code. To add another
+one, run `npx shadcn@latest add <component>`; `components.json` holds the
+settings it needs.
 
 ```text
-index.html             landing page: intro, how-to and the map grid
-map.html               map page shell and controls
+index.html             landing page shell
+map.html               map page shell
+components.json        shadcn/ui settings
 src/
-  landing.ts           renders the grid and wires its filters
+  pages/               entry points that mount each page
+  components/
+    LandingPage.tsx    intro and how-to
+    MapCatalog.tsx     the map grid with its sort and filter menus
+    MapPage.tsx        map controls wired to the renderer
+    ui/                shadcn/ui components (new-york style)
+  hooks/useCatalog.ts  loads data/cities.json
   catalog.ts           filtering and sorting of the map catalog
-  main.ts              wires the map page controls to the renderer
   renderer.ts          canvas, projection, zoom, timeline, plugin host
   schema.ts            data types shared by the renderer and the build step
-  style.css            Tailwind entry point and component classes
+  styles/globals.css   Tailwind and the shadcn/ui theme
   plugins/             basemap, network, landmarks
 build/
   config.ts            cities, inclusion profiles and default mode groups
@@ -156,6 +168,8 @@ under the terms of the GNU General Public License as published by the Free
 Software Foundation, either version 3 of the License, or (at your option)
 any later version. See [`LICENSE.md`](LICENSE.md) for the full text.
 
+[React]: https://react.dev
+[shadcn/ui]: https://ui.shadcn.com
 [Tailwind CSS]: https://tailwindcss.com
 [d3-geo]: https://d3js.org/d3-geo
 [d3-zoom]: https://d3js.org/d3-zoom

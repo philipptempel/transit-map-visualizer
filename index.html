@@ -5,86 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Transit evolution</title>
     <meta name="description" content="Animated maps of how public transport networks were built, extended and cut back over the decades." />
+    <script>
+      // Follow the system theme; set before first paint to avoid a light flash.
+      const dark = matchMedia("(prefers-color-scheme: dark)");
+      const apply = () => document.documentElement.classList.toggle("dark", dark.matches);
+      apply();
+      dark.addEventListener("change", apply);
+    </script>
   </head>
-  <body class="bg-neutral-50 text-neutral-900 antialiased dark:bg-neutral-950 dark:text-neutral-100">
-    <main class="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
-      <section class="max-w-3xl">
-        <p class="text-sm font-semibold tracking-wide text-emerald-700 uppercase dark:text-emerald-400">Transit evolution</p>
-        <h1 class="mt-2 text-4xl font-bold tracking-tight text-balance sm:text-5xl">Watch transit networks grow</h1>
-        <p class="mt-5 text-lg text-pretty text-neutral-600 dark:text-neutral-300">
-          Every tram line and metro tunnel was built at some point, and plenty were torn up again.
-          These animated maps replay that history year by year, so you can see why a network looks the way it
-          does today: which lines are old, which are new, and which ones quietly disappeared.
-        </p>
-      </section>
-
-      <section class="mt-12" aria-labelledby="how">
-        <h2 id="how" class="text-xl font-semibold">How to use it</h2>
-        <ol class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <li class="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
-            <span class="font-semibold">1. Pick a map</span>
-            <p class="mt-1 text-sm text-neutral-600 dark:text-neutral-400">Choose one from the list below. Filter by region or type of network to narrow it down.</p>
-          </li>
-          <li class="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
-            <span class="font-semibold">2. Press play</span>
-            <p class="mt-1 text-sm text-neutral-600 dark:text-neutral-400">The years roll forward and lines appear as they open. Drag the slider to jump to any year.</p>
-          </li>
-          <li class="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
-            <span class="font-semibold">3. Switch layouts</span>
-            <p class="mt-1 text-sm text-neutral-600 dark:text-neutral-400"><em>Geographic</em> shows lines where they run. <em>Schematic</em> morphs them into a tidy metro-style diagram.</p>
-          </li>
-          <li class="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
-            <span class="font-semibold">4. Explore</span>
-            <p class="mt-1 text-sm text-neutral-600 dark:text-neutral-400">Toggle modes such as tram or S-Bahn. Scroll to zoom, drag to pan. Station names appear up close.</p>
-          </li>
-        </ol>
-      </section>
-
-      <section class="mt-14" aria-labelledby="maps">
-        <div class="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 id="maps" class="text-xl font-semibold">Maps</h2>
-          <p id="count" class="text-sm text-neutral-500 dark:text-neutral-400" aria-live="polite"></p>
-        </div>
-
-        <form id="filters" class="mt-4 grid grid-cols-2 gap-3 rounded-xl border border-neutral-200 bg-white p-4 sm:grid-cols-3 lg:grid-cols-6 dark:border-neutral-800 dark:bg-neutral-900">
-          <label class="flex flex-col gap-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">Sort by
-            <select id="sort" class="field">
-              <option value="name:asc">Name, A to Z</option>
-              <option value="name:desc">Name, Z to A</option>
-              <option value="created:desc">Created, newest first</option>
-              <option value="created:asc">Created, oldest first</option>
-              <option value="updated:desc">Updated, newest first</option>
-              <option value="updated:asc">Updated, oldest first</option>
-            </select>
-          </label>
-          <label class="flex flex-col gap-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">Type
-            <select id="f-type" class="field"></select>
-          </label>
-          <label class="flex flex-col gap-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">Continent
-            <select id="f-continent" class="field"></select>
-          </label>
-          <label class="flex flex-col gap-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">Country
-            <select id="f-country" class="field"></select>
-          </label>
-          <label class="flex flex-col gap-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">State / region
-            <select id="f-state" class="field"></select>
-          </label>
-          <div class="flex items-end">
-            <button type="reset" class="btn w-full">Reset</button>
-          </div>
-        </form>
-
-        <ul id="grid" class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3"></ul>
-        <p id="empty" class="mt-6 hidden rounded-xl border border-dashed border-neutral-300 p-8 text-center text-neutral-500 dark:border-neutral-700">
-          No maps match these filters.
-        </p>
-      </section>
-    </main>
-
-    <footer class="border-t border-neutral-200 px-4 py-6 text-center text-sm text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
-      Free software under the GNU GPL v3 or later.
-      <a class="underline hover:text-neutral-800 dark:hover:text-neutral-200" href="https://github.com/philipptempel/transit-map-visualizer">Source code</a>
-    </footer>
-    <script type="module" src="/src/landing.ts"></script>
+  <body class="antialiased">
+    <div id="root"></div>
+    <script type="module" src="/src/pages/landing.tsx"></script>
   </body>
 </html>
