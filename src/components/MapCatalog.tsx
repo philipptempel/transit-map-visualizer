@@ -85,7 +85,7 @@ function MapCard({ entry: c }: { entry: CityEntry }) {
   return (
     <li>
       {ready
-        ? <a href={`map.html?city=${encodeURIComponent(c.id)}`} className="group block h-full rounded-xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">{card}</a>
+        ? <a href={`map/${encodeURIComponent(c.id)}.html`} className="group block h-full rounded-xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">{card}</a>
         : <div className="h-full" aria-disabled="true">{card}</div>}
     </li>
   );

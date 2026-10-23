@@ -40,7 +40,7 @@ export function MapPage() {
   const entries = useCatalog();
   if (!entries) return null;
   const cities = entries.filter(isAvailable);
-  const wanted = new URLSearchParams(location.search).get("city");
+  const wanted = decodeURIComponent(location.pathname.match(/\/map\/([^/]+)\.html$/)?.[1] ?? "");
   const city = cities.find((c) => c.id === wanted) ?? cities[0];
   if (!city) return <p className="p-6 text-muted-foreground">No maps with data yet.</p>;
   return <MapView city={city} cities={cities} />;
@@ -57,7 +57,6 @@ function MapView({ city, cities }: { city: CityEntry; cities: CityEntry[] }) {
   // It lives as long as the page, since picking another city reloads the page.
   useEffect(() => {
     if (renderer.current || !canvas.current) return;
-    document.title = `${city.name} · Transit evolution`;
     const r = createRenderer({
       canvas: canvas.current,
       city,
@@ -122,7 +121,7 @@ function MapView({ city, cities }: { city: CityEntry; cities: CityEntry[] }) {
         <Button variant="outline" size="sm" asChild>
           <a href="./"><ArrowLeft data-icon="inline-start" /> All maps</a>
         </Button>
-        <Select value={city.id} onValueChange={(id) => { location.search = `?city=${encodeURIComponent(id)}`; }}>
+        <Select value={city.id} onValueChange={(id) => { location.href = `map/${encodeURIComponent(id)}.html`; }}>
           <SelectTrigger size="sm" aria-label="Map"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectGroup>

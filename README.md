@@ -56,8 +56,8 @@ npm run preview    # serve the production build
 npm run typecheck  # typecheck only
 ```
 
-Open the URL Vite prints to get the landing page. The map itself is
-`map.html?city=<id>`, for example `map.html?city=demostadt`.
+Open the URL Vite prints to get the landing page. Each map has its own page
+at `map/<id>.html`, for example `map/demostadt.html`.
 
 ## Using the map
 
@@ -111,7 +111,7 @@ settings it needs.
 
 ```text
 index.html             landing page shell
-map.html               map page shell
+map.html               map page shell, built into map/<id>.html per city
 components.json        shadcn/ui settings
 src/
   pages/               entry points that mount each page
@@ -127,6 +127,7 @@ src/
   styles/globals.css   Tailwind and the shadcn/ui theme
   plugins/             basemap, network, landmarks
 build/
+  pages.ts             Vite plugin that renders the per-city map pages
   config.ts            cities, inclusion profiles and default mode groups
   classify.ts          maps OSM route tags or GTFS route types to modes
 public/data/           per-city data served as static JSON
@@ -175,7 +176,8 @@ date means open-ended. The full types are in [`src/schema.ts`](src/schema.ts).
    using `classify()` from [`build/classify.ts`](build/classify.ts) to assign
    modes.
 3. Add the city to `public/data/cities.json` with its type, location and
-   dates (see the table above).
+   dates (see the table above). Unless it is `planned`, the build then gives
+   it a page at `map/<city-id>.html`.
 
 ## Deployment
 
