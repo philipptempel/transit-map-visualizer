@@ -15,7 +15,7 @@ export function LandingPage() {
     <>
       <main className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
         <section className="max-w-3xl">
-          <p className="text-sm font-semibold tracking-wide text-emerald-700 uppercase dark:text-emerald-400">Transit evolution</p>
+          <p className="text-sm font-semibold tracking-wide text-brand uppercase">Transit evolution</p>
           <h1 className="mt-2 text-4xl font-bold tracking-tight text-balance sm:text-5xl">Watch transit networks grow</h1>
           <p className="mt-5 text-lg text-pretty text-muted-foreground">
             Every tram line and metro tunnel was built at some point, and plenty were torn up again.

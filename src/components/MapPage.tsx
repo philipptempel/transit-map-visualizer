@@ -88,7 +88,7 @@ function MapView({ city, cities }: { city: CityEntry; cities: CityEntry[] }) {
         </FieldSet>
       </header>
 
-      <canvas ref={canvas} id="map" className="block h-full min-h-0 w-full touch-none bg-[#faf8f4]" />
+      <canvas ref={canvas} id="map" className="block h-full min-h-0 w-full touch-none bg-map" />
 
       <footer className="flex flex-wrap items-center gap-3 border-t px-3 py-2">
         <Button id="play" variant="outline" size="sm" className="w-24" disabled={!snap}

@@ -63,7 +63,7 @@ function MapCard({ entry: c }: { entry: CityEntry }) {
     : [c.state, c.country && countryName(c.country), c.continent].filter(Boolean).join(" · ");
   const card = (
     <Card className={cn("h-full gap-4 transition",
-      ready ? "group-hover:border-emerald-600/60 group-hover:shadow-md" : "border-dashed bg-muted/40 opacity-75 shadow-none")}>
+      ready ? "group-hover:shadow-md group-hover:ring-brand/60" : "border-dashed bg-muted/40 opacity-75 shadow-none")}>
       <CardHeader>
         <CardTitle className="text-lg">{c.name}</CardTitle>
         <CardDescription>{where}</CardDescription>
@@ -77,7 +77,7 @@ function MapCard({ entry: c }: { entry: CityEntry }) {
       </CardContent>
       <CardFooter className="mt-auto text-sm font-medium">
         {ready
-          ? <span className="inline-flex items-center gap-1 text-emerald-700 group-hover:underline dark:text-emerald-400">Open map <ArrowRight className="size-4" /></span>
+          ? <span className="inline-flex items-center gap-1 text-brand group-hover:underline">Open map <ArrowRight className="size-4" /></span>
           : <span className="text-muted-foreground">Data not available yet</span>}
       </CardFooter>
     </Card>
