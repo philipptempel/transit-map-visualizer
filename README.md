@@ -9,10 +9,15 @@ ground, over a base map) and a **schematic** view (a tidied-up diagram in the
 style of a metro map). Mode groups such as tram, S-Bahn or ferry can be
 switched on and off individually.
 
+A landing page explains the project and lists every map in a grid that can
+be sorted by name or date and filtered by type of network and by continent,
+country and state.
+
 Only a fictional demo city, *Demostadt*, ships with data so far. The
 configuration and route classification for real cities (Nantes, Stuttgart,
 Den Haag, Rotterdam, and French national rail) are in place, but the step
-that fetches their data is not written yet.
+that fetches their data is not written yet. The landing page lists them as
+"data not available yet".
 
 ## Getting started
 
@@ -26,10 +31,17 @@ npm run preview    # serve the production build
 npm run typecheck  # typecheck only
 ```
 
-Open the URL Vite prints. Pick a city with `?city=<id>`, for example
-`?city=demostadt`.
+Open the URL Vite prints to get the landing page. The map itself is
+`map.html?city=<id>`, for example `map.html?city=demostadt`.
 
 ## Using the map
+
+On the landing page, pick a map from the grid. The filters cascade: the
+country menu fills once a continent is picked, and the state menu once a
+country is picked. Changing a level clears the ones below it. Undated maps
+sort last whichever direction a date sort runs.
+
+On the map page:
 
 - **Play / Pause** runs through the years at about four years per second.
   The slider jumps to a specific year.
@@ -57,12 +69,20 @@ things through typed services; for example `network` provides `stop(id)` so
 that `landmarks` can pin a landmark to a station as the map morphs. A plugin
 that throws is logged and skipped rather than taking the whole map down.
 
+The pages are styled with [Tailwind CSS] v4; the few shared component
+classes (`.btn`, `.field`) live in `src/style.css`. Both follow the system's
+light or dark setting.
+
 ```text
-index.html             page shell and controls
+index.html             landing page: intro, how-to and the map grid
+map.html               map page shell and controls
 src/
-  main.ts              wires the controls to the renderer
+  landing.ts           renders the grid and wires its filters
+  catalog.ts           filtering and sorting of the map catalog
+  main.ts              wires the map page controls to the renderer
   renderer.ts          canvas, projection, zoom, timeline, plugin host
   schema.ts            data types shared by the renderer and the build step
+  style.css            Tailwind entry point and component classes
   plugins/             basemap, network, landmarks
 build/
   config.ts            cities, inclusion profiles and default mode groups
@@ -73,7 +93,21 @@ public/data/           per-city data served as static JSON
 ## Data
 
 Each city lives in `public/data/<city-id>/` and is listed in
-`public/data/cities.json` with an id, name and bounding box.
+`public/data/cities.json`, the catalog behind the landing page:
+
+| Field       | Meaning                                                           |
+| ----------- | ----------------------------------------------------------------- |
+| `id`, `name`, `bbox` | Identifier, display name, and `[west, south, east, north]` |
+| `type`      | `local`, `regional` or `national`                                 |
+| `continent` | Continent name, such as `Europe`                                  |
+| `country`   | ISO 3166-1 alpha-2 code; the page shows the English name          |
+| `state`     | First-level region (state, province, région), if any              |
+| `created`, `updated` | `YYYY-MM-DD` the map was added and its data last changed |
+| `status`    | `planned` for maps with no data yet: listed, but not openable     |
+| `fictional` | `true` for demo data; shown as "Fictional demo city"              |
+
+Location fields can be left out; such a map then only shows up while the
+geographic filters are unset.
 
 - **`network.json`**: mode groups, lines, stops and segments. A segment joins
   two stops and can carry its own geometry for both layouts (`geo`, `schem`)
@@ -98,16 +132,31 @@ date means open-ended. The full types are in [`src/schema.ts`](src/schema.ts).
 2. Produce `network.json` and friends for it under `public/data/<city-id>/`,
    using `classify()` from [`build/classify.ts`](build/classify.ts) to assign
    modes.
-3. Add the city to `public/data/cities.json`.
+3. Add the city to `public/data/cities.json` with its type, location and
+   dates (see the table above).
+
+## Deployment
+
+The build uses relative URLs (`base: "./"` in `vite.config.ts`), so the same
+`dist/` works at a domain root or under a project path.
+
+- **GitHub Pages**: `.github/workflows/pages.yml` builds every push and pull
+  request and deploys `master`. Enable it once under *Settings → Pages →
+  Build and deployment → Source: GitHub Actions*.
+- **GitLab Pages**: `.gitlab-ci.yml` does the same on GitLab, building merge
+  requests and branches and publishing the default branch. No setup is
+  needed beyond pushing.
 
 ## License
 
 Copyright (C) 2026 Philipp Tempel
 
 This program is free software: you can redistribute it and/or modify it
-under the terms of the GNU General Public License version 3. See
-[`LICENSE.md`](LICENSE.md) for the full text.
+under the terms of the GNU General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option)
+any later version. See [`LICENSE.md`](LICENSE.md) for the full text.
 
+[Tailwind CSS]: https://tailwindcss.com
 [d3-geo]: https://d3js.org/d3-geo
 [d3-zoom]: https://d3js.org/d3-zoom
 [d3-selection]: https://d3js.org/d3-selection
