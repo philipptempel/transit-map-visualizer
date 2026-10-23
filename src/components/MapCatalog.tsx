@@ -118,8 +118,8 @@ export function MapCatalog({ entries }: { entries: CityEntry[] }) {
         </p>
       </div>
 
-      <Card className="mt-4 py-4">
-        <CardContent className="grid grid-cols-2 gap-3 px-4 sm:grid-cols-3 lg:grid-cols-6">
+      <Card size="sm" className="mt-4">
+        <CardContent className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="sort" className="text-xs text-muted-foreground">Sort by</Label>
             <Select value={sort} onValueChange={setSort}>

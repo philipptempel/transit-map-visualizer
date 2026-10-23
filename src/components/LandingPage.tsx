@@ -29,8 +29,8 @@ export function LandingPage() {
           <ol className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {STEPS.map(([title, text]) => (
               <li key={title}>
-                <Card className="h-full py-4">
-                  <CardHeader className="px-4">
+                <Card size="sm" className="h-full">
+                  <CardHeader>
                     <CardTitle>{title}</CardTitle>
                     <CardDescription>{text}</CardDescription>
                   </CardHeader>
