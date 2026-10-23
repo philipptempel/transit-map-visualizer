@@ -1,5 +1,5 @@
 import { type MouseEvent, useEffect, useRef, useState } from "react";
-import { ArrowLeft, FastForward, Pause, Play, Rewind } from "lucide-react";
+import { ArrowLeft, FastForward, Minus, Pause, Play, Plus, Rewind } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup, ButtonGroupText } from "@/components/ui/button-group";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -162,25 +162,37 @@ function MapView({ city, cities }: { city: CityEntry; cities: CityEntry[] }) {
 
       <footer className="flex flex-wrap items-center gap-3 border-t px-3 py-2">
         <ButtonGroup aria-label="Playback">
-          <Button variant="outline" size="icon-sm" disabled={!snap} aria-label="Faster backwards" title="Faster backwards"
-            onClick={() => faster(-1)} {...keepFocus}>
-            <Rewind />
-          </Button>
-          <Button id="play" variant="outline" size="sm" className="w-24" disabled={!snap}
-            aria-label={!snap?.playing && reversed ? "Play backwards" : undefined}
-            title={snap?.playing ? "Pause (Space)" : reversed ? "Play backwards (Space)" : "Play (Space)"}
-            onClick={playPause} {...keepFocus}>
-            {snap?.playing
-              ? <><Pause data-icon="inline-start" /> Pause</>
-              : <><Play data-icon="inline-start" className={cn(reversed && "rotate-180")} /> Play</>}
-          </Button>
-          <Button variant="outline" size="icon-sm" disabled={!snap} aria-label="Faster forward" title="Faster forward"
-            onClick={() => faster(1)} {...keepFocus}>
-            <FastForward />
-          </Button>
-          <ButtonGroupText id="speed" className="w-16 justify-center tabular-nums" title="Speed: [ slower, ] faster">
-            {snap ? `${snap.speed < 0 ? "−" : ""}${Math.abs(snap.speed)}×` : ""}
-          </ButtonGroupText>
+          <ButtonGroup>
+            <Button variant="outline" size="icon-sm" disabled={!snap} aria-label="Faster backwards" title="Faster backwards"
+              onClick={() => faster(-1)} {...keepFocus}>
+              <Rewind />
+            </Button>
+            <Button id="play" variant="outline" size="sm" className="w-24" disabled={!snap}
+              aria-label={!snap?.playing && reversed ? "Play backwards" : undefined}
+              title={snap?.playing ? "Pause (Space)" : reversed ? "Play backwards (Space)" : "Play (Space)"}
+              onClick={playPause} {...keepFocus}>
+              {snap?.playing
+                ? <><Pause data-icon="inline-start" /> Pause</>
+                : <><Play data-icon="inline-start" className={cn(reversed && "rotate-180")} /> Play</>}
+            </Button>
+            <Button variant="outline" size="icon-sm" disabled={!snap} aria-label="Faster forward" title="Faster forward"
+              onClick={() => faster(1)} {...keepFocus}>
+              <FastForward />
+            </Button>
+          </ButtonGroup>
+          <ButtonGroup aria-label="Speed">
+            <Button variant="outline" size="icon-sm" disabled={!snap || Math.abs(snap.speed) <= SPEEDS[0]}
+              aria-label="Slower" title="Slower ([)" onClick={() => changeSpeed(-1)} {...keepFocus}>
+              <Minus />
+            </Button>
+            <ButtonGroupText id="speed" className="w-16 justify-center tabular-nums">
+              {snap ? `${snap.speed < 0 ? "−" : ""}${Math.abs(snap.speed)}×` : ""}
+            </ButtonGroupText>
+            <Button variant="outline" size="icon-sm" disabled={!snap || Math.abs(snap.speed) >= SPEEDS.at(-1)!}
+              aria-label="Faster" title="Faster (])" onClick={() => changeSpeed(1)} {...keepFocus}>
+              <Plus />
+            </Button>
+          </ButtonGroup>
         </ButtonGroup>
         <span id="year" className="min-w-[4ch] text-3xl font-semibold tabular-nums">{snap ? year : ""}</span>
         <Slider

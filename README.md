@@ -71,8 +71,9 @@ On the map page:
 - **Play / Pause** runs through the years at about four years per second.
   **Fast forward** and **rewind** set the direction: the first press in the
   other direction reverses at normal speed, and each further press doubles
-  it, up to 8×. The play button's arrow shows which way it will run. The
-  slider jumps to a specific year.
+  it, up to 8×. The play button's arrow shows which way it will run. **−**
+  and **+** beside the speed step it down to 0.25× or up to 8× without
+  changing direction. The slider jumps to a specific year.
 - **Keyboard:** Space plays and pauses, `[` and `]` halve and double the
   speed (from 0.25× to 8×), and the left and right arrow keys step one year.
 - **Geographic / Schematic** morphs between the two layouts.
