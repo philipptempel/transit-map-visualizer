@@ -69,12 +69,17 @@ sort last whichever direction a date sort runs.
 On the map page:
 
 - **Play / Pause** runs through the years at about four years per second.
-  The slider jumps to a specific year.
+  **Fast forward** and **rewind** set the direction: the first press in the
+  other direction reverses at normal speed, and each further press doubles
+  it, up to 8×. The play button's arrow shows which way it will run. The
+  slider jumps to a specific year.
+- **Keyboard:** Space plays and pauses, `[` and `]` halve and double the
+  speed (from 0.25× to 8×), and the left and right arrow keys step one year.
 - **Geographic / Schematic** morphs between the two layouts.
 - **Checkboxes** in the header toggle mode groups and landmarks.
 - **Scroll and drag** to zoom and pan. Station names appear once you zoom in.
-- **Badges** in the footer say which base map is shown and where a group's
-  data does not reach back to the year on screen.
+- **Notes** in the bottom-left corner of the map say which base map is shown
+  and where a group's data does not reach back to the year on screen.
 
 ## How it is built
 
