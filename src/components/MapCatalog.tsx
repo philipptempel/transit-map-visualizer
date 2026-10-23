@@ -3,6 +3,7 @@ import { ArrowRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { distinct, isAvailable, MAP_TYPE_LABELS, matches, sortEntries, type Filters, type SortDir, type SortKey } from "@/catalog";
@@ -93,6 +94,7 @@ function MapCard({ entry: c }: { entry: CityEntry }) {
 export function MapCatalog({ entries }: { entries: CityEntry[] }) {
   const [sort, setSort] = useState("name:asc");
   const [f, setF] = useState<Filters>({});
+  const reset = () => { setF({}); setSort("name:asc"); };
 
   // Each geographic level only offers what exists inside the level above it.
   const menus = useMemo(() => {
@@ -144,14 +146,22 @@ export function MapCatalog({ entries }: { entries: CityEntry[] }) {
             hint={f.country ? "None for this country" : "Country first"} options={menus.states}
             value={f.state} onChange={(v) => setF({ ...f, state: v })} />
           <div className="flex items-end">
-            <Button variant="outline" className="w-full" onClick={() => { setF({}); setSort("name:asc"); }}>Reset</Button>
+            <Button variant="outline" className="w-full" onClick={reset}>Reset</Button>
           </div>
         </CardContent>
       </Card>
 
       {shown.length > 0
         ? <ul id="grid" className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{shown.map((c) => <MapCard key={c.id} entry={c} />)}</ul>
-        : <p id="empty" className="mt-6 rounded-xl border border-dashed p-8 text-center text-muted-foreground">No maps match these filters.</p>}
+        : (
+          <Empty id="empty" className="mt-6 border">
+            <EmptyHeader>
+              <EmptyTitle>No maps match these filters</EmptyTitle>
+              <EmptyDescription>Try another type or region, or start over.</EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent><Button variant="outline" onClick={reset}>Reset filters</Button></EmptyContent>
+          </Empty>
+        )}
     </section>
   );
 }
