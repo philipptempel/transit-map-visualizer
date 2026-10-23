@@ -88,7 +88,15 @@ function MapView({ city, cities }: { city: CityEntry; cities: CityEntry[] }) {
         </FieldSet>
       </header>
 
-      <canvas ref={canvas} id="map" className="block h-full min-h-0 w-full touch-none bg-map" />
+      {/* The notes float over the map so the canvas keeps its size when they come and go. */}
+      <div className="relative min-h-0">
+        <canvas ref={canvas} id="map" className="absolute inset-0 block size-full touch-none bg-map" />
+        {!!snap?.badges.length && (
+          <ul id="badges" className="pointer-events-none absolute bottom-2 left-2 max-w-[calc(100%-1rem)] rounded-md bg-background/80 px-2 py-1 text-xs text-muted-foreground shadow-xs backdrop-blur-sm">
+            {snap.badges.map((b) => <li key={b}>{b}</li>)}
+          </ul>
+        )}
+      </div>
 
       <footer className="flex flex-wrap items-center gap-3 border-t px-3 py-2">
         <Button id="play" variant="outline" size="sm" className="w-24" disabled={!snap}
@@ -105,7 +113,6 @@ function MapView({ city, cities }: { city: CityEntry; cities: CityEntry[] }) {
             setSnap((s) => s && { ...s, year: y, playing: false });
           }}
         />
-        <p id="badges" className="basis-full text-xs text-muted-foreground">{snap?.badges.join(" · ")}</p>
       </footer>
     </div>
   );
