@@ -1,0 +1,35 @@
+# Local development with mise (https://mise.jdx.dev).
+# First time: `mise trust && mise install`; then `mise run dev`. `mise tasks` lists the rest.
+
+[tools]
+node = "24"   # same major as CI (.github/workflows/pages.yml, .gitlab-ci.yml)
+
+[env]
+# Call vite, tsc or shadcn directly while inside the project.
+_.path = ["{{config_root}}/node_modules/.bin"]
+
+[tasks.install]
+description = "Install npm dependencies (skipped while the lockfile is unchanged)"
+run = "npm ci"
+sources = ["package.json", "package-lock.json"]
+outputs = ["node_modules/.package-lock.json"]
+
+[tasks.dev]
+description = "Start the Vite dev server with hot reload"
+depends = ["install"]
+run = "npm run dev"
+
+[tasks.typecheck]
+description = "Typecheck without building"
+depends = ["install"]
+run = "npm run typecheck"
+
+[tasks.build]
+description = "Typecheck and build into dist/, as CI does"
+depends = ["install"]
+run = "npm run build"
+
+[tasks.preview]
+description = "Build, then serve the production build"
+depends = ["build"]
+run = "npm run preview"

@@ -21,6 +21,31 @@ that fetches their data is not written yet. The landing page lists them as
 
 ## Getting started
 
+### With mise (recommended on macOS)
+
+[mise] installs the Node version the project uses (24, the same as CI) and
+runs the project's tasks. It installs npm dependencies by itself whenever
+`package-lock.json` changes.
+
+```sh
+brew install mise
+echo 'eval "$(mise activate zsh)"' >> ~/.zshrc   # then open a new terminal
+
+mise trust         # once: allow this repo's mise.toml
+mise install       # once: fetch Node 24
+mise run dev       # dev server with hot reload
+mise run build     # typecheck and build into dist/, as CI does
+mise run preview   # build, then serve the production build
+mise run typecheck # typecheck only
+mise tasks         # list all tasks
+```
+
+Inside the project, mise also puts `node_modules/.bin` on your `PATH`, so
+`vite`, `tsc` and `shadcn` work without `npx`. For personal settings, use a
+`mise.local.toml`; it is ignored by git.
+
+### With npm
+
 Requires Node.js 20.19+ or 22.12+ (what Vite 8 needs).
 
 ```sh
@@ -168,6 +193,7 @@ under the terms of the GNU General Public License as published by the Free
 Software Foundation, either version 3 of the License, or (at your option)
 any later version. See [`LICENSE.md`](LICENSE.md) for the full text.
 
+[mise]: https://mise.jdx.dev
 [React]: https://react.dev
 [shadcn/ui]: https://ui.shadcn.com
 [Tailwind CSS]: https://tailwindcss.com
