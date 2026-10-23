@@ -89,7 +89,7 @@ src/
     LandingPage.tsx    intro and how-to
     MapCatalog.tsx     the map grid with its sort and filter menus
     MapPage.tsx        map controls wired to the renderer
-    ui/                shadcn/ui components (new-york style)
+    ui/                shadcn/ui components (Vega preset, Radix)
   hooks/useCatalog.ts  loads data/cities.json
   catalog.ts           filtering and sorting of the map catalog
   renderer.ts          canvas, projection, zoom, timeline, plugin host
