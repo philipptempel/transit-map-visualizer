@@ -16,7 +16,7 @@ that fetches their data is not written yet.
 
 ## Getting started
 
-Requires Node.js 20 or newer.
+Requires Node.js 20.19+ or 22.12+ (what Vite 8 needs).
 
 ```sh
 npm install
