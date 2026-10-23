@@ -17,6 +17,8 @@ export interface Services {}
 export interface RenderState {
   year: number; morph: number; t: ZoomTransform;
   width: number; height: number; dpr: number; playing: boolean;
+  /** Playback rate as a multiple of yearsPerSecond. Negative runs backwards. */
+  speed: number;
 }
 
 export interface Ctx {
@@ -45,7 +47,7 @@ export interface Plugin {
   draw?(ctx: Ctx): void;
 }
 
-export interface Snapshot { year: number; morph: number; playing: boolean; range: [number, number]; badges: string[] }
+export interface Snapshot { year: number; morph: number; playing: boolean; speed: number; range: [number, number]; badges: string[] }
 
 export interface RendererOptions {
   canvas: HTMLCanvasElement; city: CityEntry; plugins: Plugin[];
@@ -57,9 +59,11 @@ export interface Renderer {
   readonly state: Readonly<RenderState>;
   groups(): (ToggleGroup & { on: boolean })[];
   toggle(id: string, value?: boolean): void;
-  setYear(year: number): void;
+  /** Pauses and jumps to `year`, clamped to the range. Returns the year it landed on. */
+  setYear(year: number): number;
   play(): void;
   pause(): void;
+  setSpeed(speed: number): void;
   setMode(target: 0 | 1, ms?: number): void;
   onChange(cb: (s: Snapshot) => void): () => void;
 }
@@ -125,7 +129,7 @@ export function createRenderer({
   const broken = new Set<Plugin>();
   const live = () => order.filter((p) => !broken.has(p));
 
-  const state: RenderState = { year: 0, morph: 0, t: zoomIdentity, width: 0, height: 0, dpr: 1, playing: false };
+  const state: RenderState = { year: 0, morph: 0, t: zoomIdentity, width: 0, height: 0, dpr: 1, playing: false, speed: 1 };
   const groups = new Map<string, ToggleGroup>();
   const on = new Set<string>();
   const badges = new Map<string, string>();
@@ -133,6 +137,7 @@ export function createRenderer({
   const listeners = new Set<(s: Snapshot) => void>();
   const range: [number, number] = [Infinity, -Infinity];
   let frame = 0;
+  let run = 0;   // bumped on every play(), so a loop from an earlier play() stops
 
   const ctx: Ctx = {
     g, city, state, projection,
@@ -171,7 +176,7 @@ export function createRenderer({
       g.restore();
     }
     const snap: Snapshot = {
-      year: state.year, morph: state.morph, playing: state.playing,
+      year: state.year, morph: state.morph, playing: state.playing, speed: state.speed,
       range: [range[0], range[1]], badges: [...badges.values()],
     };
     listeners.forEach((cb) => cb(snap));
@@ -193,16 +198,22 @@ export function createRenderer({
     schedule();
   }
 
+  const atEnd = () => (state.speed > 0 ? state.year >= range[1] : state.year <= range[0]);
+
   function play() {
     if (state.playing) return;
-    if (state.year >= range[1]) state.year = range[0];
+    if (atEnd()) state.year = state.speed > 0 ? range[0] : range[1];
     state.playing = true;
+    const id = ++run;
     let last = 0;
     const step = (now: number) => {
-      if (!state.playing) return;
-      if (last) state.year = Math.min(range[1], state.year + ((now - last) / 1000) * yearsPerSecond);
+      if (!state.playing || id !== run) return;
+      if (last) {
+        const year = state.year + ((now - last) / 1000) * yearsPerSecond * state.speed;
+        state.year = Math.max(range[0], Math.min(range[1], year));
+      }
       last = now;
-      if (state.year >= range[1]) state.playing = false;
+      if (atEnd()) state.playing = false;
       draw();
       if (state.playing) requestAnimationFrame(step);
     };
@@ -241,9 +252,15 @@ export function createRenderer({
     state,
     groups: () => [...groups.values()].map((d) => ({ ...d, on: on.has(d.id) })),
     toggle(id, value = !on.has(id)) { if (value) on.add(id); else on.delete(id); schedule(); },
-    setYear(year) { state.playing = false; state.year = year; schedule(); },
+    setYear(year) {
+      state.playing = false;
+      state.year = Math.max(range[0], Math.min(range[1], year));
+      schedule();
+      return state.year;
+    },
     play,
     pause() { state.playing = false; schedule(); },
+    setSpeed(speed) { state.speed = speed; schedule(); },
     setMode,
     onChange(cb) { listeners.add(cb); return () => { listeners.delete(cb); }; },
   };
