@@ -1,6 +1,7 @@
 {
   "name": "transit-evolution",
   "private": true,
+  "license": "GPL-3.0-or-later",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,10 +15,12 @@
     "d3-zoom": "^3.0.0"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
     "@types/d3-geo": "^3.1.1",
     "@types/d3-selection": "^3.0.12",
     "@types/d3-zoom": "^3.0.9",
     "@types/geojson": "^7946.0.16",
+    "tailwindcss": "^4.3.3",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.5"

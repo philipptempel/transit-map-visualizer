@@ -1,1 +1,32 @@
-[{ "id": "demostadt", "name": "Demostadt (fictional)", "bbox": [0.0, 0.02, 0.3, 0.28] }]
+[
+  {
+    "id": "demostadt", "name": "Demostadt", "bbox": [0.0, 0.02, 0.3, 0.28],
+    "type": "local", "fictional": true,
+    "created": "2026-10-23", "updated": "2026-10-23"
+  },
+  {
+    "id": "nantes", "name": "Nantes", "bbox": [-1.80, 47.10, -1.35, 47.35],
+    "type": "local", "continent": "Europe", "country": "FR", "state": "Pays de la Loire",
+    "status": "planned"
+  },
+  {
+    "id": "stuttgart", "name": "Stuttgart", "bbox": [8.75, 48.55, 9.55, 49.00],
+    "type": "local", "continent": "Europe", "country": "DE", "state": "Baden-Württemberg",
+    "status": "planned"
+  },
+  {
+    "id": "den-haag", "name": "Den Haag", "bbox": [4.18, 51.98, 4.45, 52.15],
+    "type": "local", "continent": "Europe", "country": "NL", "state": "Zuid-Holland",
+    "status": "planned"
+  },
+  {
+    "id": "rotterdam", "name": "Rotterdam", "bbox": [4.30, 51.83, 4.65, 52.00],
+    "type": "local", "continent": "Europe", "country": "NL", "state": "Zuid-Holland",
+    "status": "planned"
+  },
+  {
+    "id": "france-rail", "name": "France (rail)", "bbox": [-5.2, 41.3, 9.6, 51.1],
+    "type": "national", "continent": "Europe", "country": "FR",
+    "status": "planned"
+  }
+]

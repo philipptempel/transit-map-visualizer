@@ -20,7 +20,20 @@ export interface GroupDef extends ToggleGroup {
   coverage?: { from?: string };    // earliest year with real data, set by the fetch step
 }
 
-export interface CityEntry { id: string; name: string; bbox: BBox }
+export type MapType = "local" | "regional" | "national";
+
+/** One entry in data/cities.json, the catalog shown on the landing page. */
+export interface CityEntry {
+  id: string; name: string; bbox: BBox;
+  type: MapType;
+  continent?: string;              // e.g. "Europe"; absent for fictional maps
+  country?: string;                // ISO 3166-1 alpha-2
+  state?: string;                  // first-level administrative region
+  created?: string;                // "YYYY-MM-DD" the map was added
+  updated?: string;                // "YYYY-MM-DD" its data last changed
+  status?: "available" | "planned";   // planned = configured, no data yet
+  fictional?: boolean;
+}
 
 export interface Line { id: string; ref?: string; name?: string; mode: Mode; color?: string }
 

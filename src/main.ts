@@ -1,3 +1,5 @@
+import "./style.css";
+import { isAvailable } from "./catalog";
 import { createRenderer } from "./renderer";
 import { basemap } from "./plugins/basemap";
 import { landmarks } from "./plugins/landmarks";
@@ -11,9 +13,10 @@ const $ = <T extends Element = HTMLElement>(sel: string): T => {
 };
 
 async function main() {
-  const cities = (await (await fetch("data/cities.json")).json()) as CityEntry[];
+  const cities = ((await (await fetch("data/cities.json")).json()) as CityEntry[]).filter(isAvailable);
   const wanted = new URLSearchParams(location.search).get("city");
   const city = cities.find((c) => c.id === wanted) ?? cities[0];
+  document.title = `${city.name} · Transit evolution`;
 
   const select = $<HTMLSelectElement>("#city");
   select.innerHTML = cities
@@ -35,7 +38,8 @@ async function main() {
 
   const groupsEl = $("#groups");
   groupsEl.innerHTML = r.groups()
-    .map((gd) => `<label><input type="checkbox" data-g="${gd.id}" ${gd.on ? "checked" : ""}> ${gd.label}</label>`)
+    .map((gd) => `<label class="inline-flex items-center gap-1.5 whitespace-nowrap">`
+      + `<input type="checkbox" class="accent-neutral-900 dark:accent-neutral-100" data-g="${gd.id}" ${gd.on ? "checked" : ""}> ${gd.label}</label>`)
     .join(" ");
   groupsEl.addEventListener("change", (e) => {
     const box = e.target as HTMLInputElement;

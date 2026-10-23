@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md border border-neutral-300 bg-white px-3 py-1.5
+      text-sm font-medium text-neutral-800 shadow-xs hover:bg-neutral-50
+      aria-pressed:border-neutral-900 aria-pressed:bg-neutral-900 aria-pressed:text-white
+      dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800
+      dark:aria-pressed:border-neutral-100 dark:aria-pressed:bg-neutral-100 dark:aria-pressed:text-neutral-900;
+  }
+  .field {
+    @apply rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-sm text-neutral-900 shadow-xs
+      disabled:cursor-not-allowed disabled:opacity-50
+      dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100;
+  }
+}
