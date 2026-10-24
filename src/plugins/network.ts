@@ -1,6 +1,6 @@
 import { cutAt, getJson, offset, resample, toYear, type Life, type Plugin, type Point } from "../renderer";
 import type { DateLike, GroupDef, LonLat, NetworkFile, Stop } from "../schema";
-import { lineOrder, orient, slots, type Orientation } from "./orient";
+import { lineOrder, orient, slots, spread, type Orientation } from "./orient";
 
 declare module "../renderer" {
   interface Services {
@@ -19,17 +19,22 @@ interface Seg {
   group: GroupDef; lines: Strand[]; ga: Point[]; sa: Point[];
 }
 
-export interface NetworkOptions { url: string; samples?: number; lineWidth?: number; lineGap?: number; labelZoom?: number }
+export interface NetworkOptions {
+  url: string; samples?: number; lineWidth?: number; lineGap?: number; labelZoom?: number;
+  /** Pixels a bundle of parallel lines may take at zoom 1; wider ones merge into one stroke until zoomed in. */
+  bundleWidth?: number;
+}
 
 const mix = (a: Point[], b: Point[], m: number): Point[] =>
   a.map((p, i): Point => [p[0] + (b[i][0] - p[0]) * m, p[1] + (b[i][1] - p[1]) * m]);
 
-export function network({ url, samples = 24, lineWidth = 3, lineGap = 3.5, labelZoom = 2.5 }: NetworkOptions): Plugin {
+export function network({ url, samples = 24, lineWidth = 3, lineGap = 3.5, labelZoom = 2.5, bundleWidth = 10 }: NetworkOptions): Plugin {
   let data: NetworkFile = { groups: [], lines: [], stops: [], segments: [] };
   let segs: Seg[] = [];
   let stops = new Map<string, ProjectedStop>();
   let chain: Orientation = { flip: [], prev: [], next: [] };
   let order = new Map<string, number>();
+  let widest = new Map<string, number>();   // group id → most lines on one of its segments
 
   return {
     id: "network",
@@ -43,6 +48,11 @@ export function network({ url, samples = 24, lineWidth = 3, lineGap = 3.5, label
       const groupOf = new Map(data.groups.flatMap((gd) => gd.modes.map((m) => [m, gd.id] as const)));
       chain = orient(data.segments, (seg) => groupOf.get(seg.mode));
       order = lineOrder(data.lines);
+      widest = new Map();
+      for (const seg of data.segments) {
+        const id = groupOf.get(seg.mode);
+        if (id) widest.set(id, Math.max(widest.get(id) ?? 1, seg.lines?.length ?? 1));
+      }
       [...data.segments, ...data.stops].forEach((x) => ctx.extendRange(x.start, x.end));
       // A group's data starts at its coverage, so a map of today's network alone opens on today.
       data.groups.forEach((gd) => ctx.extendRange(gd.coverage?.from));
@@ -101,6 +111,9 @@ export function network({ url, samples = 24, lineWidth = 3, lineGap = 3.5, label
         shown.set(s.i, { s, life, vis, strands: running.length ? running : [{ color: s.group.color }] });
       }
       const ids = (strands: Strand[]) => strands.flatMap((l) => (l.id ? [l.id] : []));
+      // Zoomed out, a crowded group's bundles merge into one stroke; they fan out as the map zooms in.
+      const fan = new Map(data.groups.map((gd) => [gd.id, spread(state.t.k, widest.get(gd.id) ?? 1, lineGap, bundleWidth)] as const));
+      const ease = (t: number) => t * t * (3 - 2 * t);
 
       for (const { s, life, vis, strands } of shown.values()) {
         // At each end, lay out this segment's lines together with those of the segment it chains
@@ -111,17 +124,26 @@ export function network({ url, samples = 24, lineWidth = 3, lineGap = 3.5, label
         const d0 = atEnd(chain.prev[s.i]), d1 = atEnd(chain.next[s.i]);
         const full = mix(s.ga, s.sa, state.morph);
         const last = full.length - 1;
-        g.globalAlpha = life.alpha * vis;
-        for (const l of strands) {
-          const a = (l.id && d0.get(l.id)) || 0, b = (l.id && d1.get(l.id)) || 0;
-          const pts = offset(full, (k) => { const t = k / last; return a + (b - a) * t * t * (3 - 2 * t); });
+        const f = fan.get(s.group.id) ?? 1;
+        const ends = strands.map((l) => [(l.id && d0.get(l.id)) || 0, (l.id && d1.get(l.id)) || 0] as const);
+        const stroke = (color: string, a: number, b: number, alpha: number) => {
+          const pts = offset(full, (k) => f * (a + (b - a) * ease(k / last)));
           // Grow from the segment's own `from`; cut a flipped one from the far end and turn it back.
           const path = s.flipped ? cutAt(pts.reverse(), life.grow).reverse() : cutAt(pts, life.grow);
-          g.strokeStyle = l.color;
+          g.globalAlpha = alpha;
+          g.strokeStyle = color;
           g.beginPath();
           path.forEach(([x, y], k) => (k ? g.lineTo(x, y) : g.moveTo(x, y)));
           g.stroke();
+        };
+        // Merged: one stroke down the middle, in the lines' colour if they share one. It fades as they fan out.
+        if (f < 1 && strands.length > 1) {
+          const color = strands.every((l) => l.color === strands[0].color) ? strands[0].color : s.group.color;
+          const mid = (j: 0 | 1) => ends.reduce((sum, e) => sum + e[j], 0) / ends.length;
+          stroke(color, mid(0), mid(1), life.alpha * vis * (1 - f));
         }
+        const each = strands.length > 1 ? f : 1;
+        if (each > 0) strands.forEach((l, j) => stroke(l.color, ends[j][0], ends[j][1], life.alpha * vis * each));
         if (life.alpha * vis > 0.5) {
           const [head, tail] = s.flipped ? [s.to, s.from] : [s.from, s.to];
           touched.add(head);

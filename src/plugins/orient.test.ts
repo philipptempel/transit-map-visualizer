@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Segment } from "../schema";
-import { lineOrder, orient, slots } from "./orient";
+import { lineOrder, orient, slots, spread } from "./orient";
 
 const seg = (from: string, to: string, lines: string[], mode: Segment["mode"] = "s_bahn"): Segment => ({ from, to, mode, lines });
 const byMode = (s: Segment) => s.mode;
@@ -75,5 +75,28 @@ describe("bundle layout", () => {
     expect(atStop.get("r3")).toBe(slots(arriving, order, 2).get("r3"));
     // Away from the stop, S1 and S2 centre on their own.
     expect([...slots(leaving, order, 2)]).toEqual([["r5", -1], ["r3", 1]]);
+  });
+});
+
+describe("spread", () => {
+  // Ten lines 3.5 px apart need 31.5 px; at 10 px per bundle they fit from zoom 3.15.
+  it("merges a crowded group when zoomed out and fans it out as the map zooms in", () => {
+    expect(spread(1, 10, 3.5, 10)).toBe(0);
+    expect(spread(1.575, 10, 3.5, 10)).toBe(0);
+    expect(spread(2.3625, 10, 3.5, 10)).toBeCloseTo(0.5, 9);
+    expect(spread(3.15, 10, 3.5, 10)).toBe(1);
+    expect(spread(20, 10, 3.5, 10)).toBe(1);
+  });
+
+  it("keeps a group with small bundles split at normal zoom", () => {
+    expect(spread(1, 3, 3.5, 10)).toBe(1);        // 7 px fits from zoom 0.7
+    expect(spread(0.5, 3, 3.5, 10)).toBeLessThan(1);
+    expect(spread(0.5, 1, 3.5, 10)).toBe(1);      // a single line never merges
+  });
+
+  it("only ever widens as the map zooms in", () => {
+    const ks = Array.from({ length: 100 }, (_, i) => 0.5 + i * 0.1);
+    const fs = ks.map((k) => spread(k, 12, 3.5, 10));
+    expect(fs.every((f, i) => i === 0 || f >= fs[i - 1])).toBe(true);
   });
 });

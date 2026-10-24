@@ -86,3 +86,15 @@ export function slots(ids: Iterable<string>, order: Map<string, number>, gap: nu
   const sorted = [...new Set(ids)].sort((a, b) => (order.get(a) ?? Infinity) - (order.get(b) ?? Infinity) || (a < b ? -1 : 1));
   return new Map(sorted.map((id, i) => [id, (i - (sorted.length - 1) / 2) * gap]));
 }
+
+/**
+ * How far a group's bundles fan out at zoom `k`: 0 = drawn as one stroke, 1 = every line beside
+ * the next. A bundle of `widest` lines may take `width` pixels at zoom 1; a group whose widest
+ * bundle needs more starts to split at half the zoom where it fits, and is fully split there.
+ */
+export function spread(k: number, widest: number, gap: number, width: number): number {
+  const fits = ((widest - 1) * gap) / width;   // the zoom at which the widest bundle fits
+  if (fits <= 0) return 1;
+  const t = Math.max(0, Math.min(1, (k - fits / 2) / (fits / 2)));
+  return t * t * (3 - 2 * t);
+}

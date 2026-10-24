@@ -107,7 +107,10 @@ drawing happens in plugins, which run in order:
 Lines that share track are drawn side by side, ordered by their `ref` (S1,
 S2, … S11) and chained from segment to segment so each keeps its side. Where a
 line starts or ends at a stop, the others keep their places at the stop and
-ease into their new ones along the next segment instead of jumping.
+ease into their new ones along the next segment instead of jumping. Zoomed
+out, a group's bundles merge into one stroke (in the lines' shared colour, or
+the group's) and fan out as the map zooms in; the more lines a group's widest
+bundle holds, the further in it splits.
 
 A plugin can implement `init` (load data, register toggle groups, widen the
 year range), `onProject` (re-project after a resize) and `draw`. Plugins share
