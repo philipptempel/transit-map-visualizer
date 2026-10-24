@@ -53,7 +53,7 @@ export function classify(r: RouteInfo, map: MapConfig): Mode | null {
   const mode = r.osm ? fromOsm(r.osm) : r.gtfsType != null ? fromGtfs(r.gtfsType) : null;
   if (!mode || !HEAVY.includes(mode)) return mode;
   if (map.sBahnLike?.some((m) => test(m, r))) return "s_bahn";
-  if (r.countries?.some((c) => c !== map.country)) return "international_rail";
+  if (map.country && r.countries?.some((c) => c !== map.country)) return "international_rail";
   return mode;
 }
 

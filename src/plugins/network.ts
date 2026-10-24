@@ -12,6 +12,8 @@ interface Strand { id?: string; color: string; start?: DateLike; end?: DateLike 
 interface ProjectedStop extends Stop { g: Point; s: Point }
 interface Seg {
   from: string; to: string; start?: DateLike; end?: DateLike;
+  /** Flipped into canonical order, so it grows from `to` back towards `from`. */
+  flipped: boolean;
   group: GroupDef; lines: Strand[]; ga: Point[]; sa: Point[];
 }
 
@@ -54,7 +56,8 @@ export function network({ url, samples = 24, lineWidth = 3, lineGap = 3.5, label
         let geo: LonLat[] = raw.geo ?? [a.geo, b.geo];
         let sch: LonLat[] = raw.schem ?? [a.schem ?? a.geo, b.schem ?? b.geo];
         // Canonical direction, so parallel lines keep the same side through every segment.
-        if (from > to) {
+        const flipped = from > to;
+        if (flipped) {
           [from, to] = [to, from];
           geo = [...geo].reverse();
           sch = [...sch].reverse();
@@ -66,7 +69,7 @@ export function network({ url, samples = 24, lineWidth = 3, lineGap = 3.5, label
           })
           .sort((x, y) => ((x.id ?? "") < (y.id ?? "") ? -1 : 1));
         return [{
-          from, to, start: raw.start, end: raw.end, group, lines,
+          from, to, start: raw.start, end: raw.end, flipped, group, lines,
           ga: resample(geo.map(P), samples),
           sa: resample(sch.map(P), samples),
         }];
@@ -86,7 +89,9 @@ export function network({ url, samples = 24, lineWidth = 3, lineGap = 3.5, label
         const vis = s.group.schematic ? 1 : 1 - state.morph;
         const life = ctx.life(s.start, s.end);
         if (vis <= 0.01 || life.alpha <= 0) continue;
-        const path = cutAt(mix(s.ga, s.sa, state.morph), life.grow);
+        const full = mix(s.ga, s.sa, state.morph);
+        // Grow from the segment's own `from`; cut a flipped one from the far end and turn it back.
+        const path = s.flipped ? cutAt(full.reverse(), life.grow).reverse() : cutAt(full, life.grow);
         const running = s.lines.filter((l) => ctx.life(l.start, l.end).alpha > 0);
         const strands: Strand[] = running.length ? running : [{ color: s.group.color }];
         g.globalAlpha = life.alpha * vis;
@@ -98,8 +103,9 @@ export function network({ url, samples = 24, lineWidth = 3, lineGap = 3.5, label
           g.stroke();
         });
         if (life.alpha * vis > 0.5) {
-          touched.add(s.from);
-          if (life.grow >= 1) touched.add(s.to);
+          const [head, tail] = s.flipped ? [s.to, s.from] : [s.from, s.to];
+          touched.add(head);
+          if (life.grow >= 1) touched.add(tail);
         }
       }
 

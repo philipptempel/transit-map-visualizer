@@ -153,11 +153,18 @@ function MapView({ map, maps }: { map: MapEntry; maps: MapEntry[] }) {
       {/* The notes float over the map so the canvas keeps its size when they come and go. */}
       <div className="relative min-h-0">
         <canvas ref={canvas} id="map" className="absolute inset-0 block size-full touch-none bg-map" />
-        {!!snap?.badges.length && (
-          <ul id="badges" className="pointer-events-none absolute bottom-2 left-2 max-w-[calc(100%-1rem)] rounded-md bg-background/80 px-2 py-1 text-xs text-muted-foreground shadow-xs backdrop-blur-sm">
-            {snap.badges.map((b) => <li key={b}>{b}</li>)}
-          </ul>
-        )}
+        <div className="pointer-events-none absolute inset-x-2 bottom-2 flex flex-wrap items-end justify-between gap-2 text-xs text-muted-foreground">
+          {!!snap?.badges.length && (
+            <ul id="badges" className="rounded-md bg-background/80 px-2 py-1 shadow-xs backdrop-blur-sm">
+              {snap.badges.map((b) => <li key={b}>{b}</li>)}
+            </ul>
+          )}
+          {!!map.attribution?.length && (
+            <p id="attribution" className="ml-auto rounded-md bg-background/80 px-2 py-1 shadow-xs backdrop-blur-sm">
+              {map.attribution.join(" · ")}
+            </p>
+          )}
+        </div>
       </div>
 
       <footer className="flex flex-wrap items-center gap-3 border-t px-3 py-2">

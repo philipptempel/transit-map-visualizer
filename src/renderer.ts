@@ -1,4 +1,4 @@
-import { geoMercator, type GeoProjection } from "d3-geo";
+import { geoEqualEarth, geoMercator, type GeoProjection } from "d3-geo";
 import { select } from "d3-selection";
 import { zoom, zoomIdentity, type D3ZoomEvent, type ZoomTransform } from "d3-zoom";
 import type { MultiPoint } from "geojson";
@@ -128,7 +128,7 @@ export function createRenderer({
   canvas, map, plugins, yearsPerSecond = 4, rampYears = 0.75,
 }: RendererOptions): Renderer {
   const g = canvas.getContext("2d") ?? fail("Canvas 2D context unavailable");
-  const projection = geoMercator();
+  const projection = map.projection === "equalEarth" ? geoEqualEarth() : geoMercator();
   const order = [...plugins].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const broken = new Set<Plugin>();
   const live = () => order.filter((p) => !broken.has(p));

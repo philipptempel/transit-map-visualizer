@@ -1,20 +1,24 @@
 // Filtering and sorting of the map catalog shown on the landing page.
 
-import type { MapEntry, MapType } from "./schema.ts";
+import type { MapEntry, MapType, Network } from "./schema.ts";
 
 export type SortKey = "name" | "created" | "updated";
 export type SortDir = "asc" | "desc";
 
-export interface Filters { type?: MapType; continent?: string; country?: string; state?: string }
+export interface Filters { type?: MapType; network?: Network; continent?: string; country?: string; state?: string }
 
 export const MAP_TYPE_LABELS: Record<MapType, string> = {
-  local: "Local", regional: "Regional", national: "National",
+  local: "Local", regional: "Regional", national: "National", continental: "Continental", global: "Global",
+};
+
+export const NETWORK_LABELS: Record<Network, string> = {
+  transit: "Transit", rail: "Rail", air: "Air", sea: "Sea",
 };
 
 export const isAvailable = (c: MapEntry) => c.status !== "planned";
 
 export const matches = (c: MapEntry, f: Filters) =>
-  (["type", "continent", "country", "state"] as const).every((k) => !f[k] || c[k] === f[k]);
+  (["type", "network", "continent", "country", "state"] as const).every((k) => !f[k] || c[k] === f[k]);
 
 const byName = (a: MapEntry, b: MapEntry) => a.name.localeCompare(b.name);
 
