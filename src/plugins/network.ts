@@ -270,16 +270,30 @@ export function network({
         return new Map(own.map((id) => [id, sign * there.get(id)!]));
       };
 
+      // Mid-morph, both layouts need the same points; otherwise draw the real geometry.
+      const paths = new Map<number, Point[]>();
+      const pathOf = (s: Seg) => {
+        let p = paths.get(s.i);
+        if (!p) paths.set(s.i, (p = state.morph <= 0 ? detailed(s, 0) : state.morph >= 1 ? detailed(s, 1) : mix(...paired(s), state.morph)));
+        return p;
+      };
+      // The point next to the joint on the segment chained at one end, for a mitre join there.
+      const across = (s: Seg, end: 0 | 1): Point | undefined => {
+        const other = shown.get((end ? chain.next[s.i] : chain.prev[s.i]) ?? -1)?.s;
+        if (!other) return undefined;
+        const p = pathOf(other);
+        return end ? p[1] : p[p.length - 2];
+      };
+
       for (const { s, life, vis, strands } of shown.values()) {
         // In between the two ends, each line eases from its place at one to its place at the other.
         const d0 = layout(s, 0), d1 = layout(s, 1);
-        // Mid-morph, both layouts need the same points; otherwise draw the real geometry.
-        const full = state.morph <= 0 ? detailed(s, 0) : state.morph >= 1 ? detailed(s, 1) : mix(...paired(s), state.morph);
+        const full = pathOf(s), before = across(s, 0), after = across(s, 1);
         const t = along(full);
         const f = fan.get(s.group.id) ?? 1;
         const ends = strands.map((l) => [(l.id && d0.get(l.id)) || 0, (l.id && d1.get(l.id)) || 0] as const);
         const stroke = (color: string, a: number, b: number, alpha: number) => {
-          const pts = offset(full, (k) => f * (a + (b - a) * ease(t[k])));
+          const pts = offset(full, (k) => f * (a + (b - a) * ease(t[k])), before, after);
           // Grow from the segment's own `from`; cut a flipped one from the far end and turn it back.
           const path = s.flipped ? cutAt(pts.reverse(), life.grow).reverse() : cutAt(pts, life.grow);
           g.globalAlpha = alpha;

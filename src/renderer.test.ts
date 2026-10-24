@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { along, cutAt, simplify, type Point } from "./renderer";
+import { along, cutAt, offset, simplify, type Point } from "./renderer";
 
 describe("simplify", () => {
   const wiggle: Point[] = [[0, 0], [10, 0.2], [20, 0], [30, 3], [40, 0]];
@@ -33,5 +33,17 @@ describe("cutAt", () => {
 
   it("measures how far along each point lies", () => {
     expect(along(pts)).toEqual([0, 0.9, 1]);
+  });
+});
+
+describe("offset", () => {
+  it("meets the next line exactly at a joint when told its neighbouring point (a mitre join)", () => {
+    // Down, then sharply right: offsetting each half on its own leaves a step at (0, 10).
+    const down: Point[] = [[0, 0], [0, 10]], right: Point[] = [[0, 10], [10, 10]];
+    const apart = [offset(down, 2).at(-1)!, offset(right, 2)[0]];
+    expect(apart[0]).not.toEqual(apart[1]);
+    const joined = [offset(down, 2, undefined, right[1]).at(-1)!, offset(right, 2, down[0])[0]];
+    expect(joined[0][0]).toBeCloseTo(joined[1][0], 9);
+    expect(joined[0][1]).toBeCloseTo(joined[1][1], 9);
   });
 });

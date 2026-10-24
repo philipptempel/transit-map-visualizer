@@ -160,12 +160,18 @@ export function simplify(pts: Point[], tol: number): Point[] {
   return pts.filter((_, i) => keep[i]);
 }
 
-/** Shifts a line sideways by `d`, or by `d(i)` at point i, to the left of its direction. */
-export function offset(pts: Point[], d: number | ((i: number) => number)): Point[] {
+/**
+ * Shifts a line sideways by `d`, or by `d(i)` at point i, to the left of its direction. `before`
+ * and `after` are the neighbouring points of the lines it joins at either end, if any, so both
+ * shift the same way at the joint and meet (a mitre join) instead of leaving a step.
+ */
+export function offset(pts: Point[], d: number | ((i: number) => number), before?: Point, after?: Point): Point[] {
   if (!d) return pts;
   const at = typeof d === "number" ? () => d : d;
+  const last = pts.length - 1;
   return pts.map((p, i): Point => {
-    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
+    const a = i === 0 && before ? before : pts[Math.max(0, i - 1)];
+    const b = i === last && after ? after : pts[Math.min(last, i + 1)];
     const dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy) || 1;
     const di = at(i);
     return [p[0] - (dy / len) * di, p[1] + (dx / len) * di];
