@@ -12,7 +12,8 @@
   {
     "id": "stuttgart", "name": "Stuttgart", "bbox": [8.75, 48.55, 9.55, 49],
     "type": "local", "network": "transit", "continent": "Europe", "country": "DE", "state": "Baden-Württemberg",
-    "status": "planned"
+    "created": "2026-10-24", "updated": "2026-10-24", "status": "available",
+    "attribution": ["© OpenStreetMap contributors"]
   },
   {
     "id": "den-haag", "name": "Den Haag", "bbox": [4.18, 51.98, 4.45, 52.15],
