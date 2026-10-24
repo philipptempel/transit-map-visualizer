@@ -1,4 +1,4 @@
-import { along, cutAt, getJson, offset, resample, simplify, toYear, type Life, type Plugin, type Point } from "../renderer";
+import { along, clamp01, cutAt, getJson, offset, resample, simplify, toYear, type Ctx, type Life, type Plugin, type Point } from "../renderer";
 import type { DateLike, GroupDef, LonLat, NetworkFile, Stop } from "../schema";
 import { lineOrder, orient, slots, spread, type Orientation } from "./orient";
 
@@ -27,6 +27,10 @@ const LEVELS = [-1, 6] as const;
 
 export interface NetworkOptions {
   url: string; samples?: number; lineWidth?: number; lineGap?: number; labelZoom?: number;
+  /** Other stops fade in between these zooms; below, only those where something happens are shown. */
+  stopZoom?: [number, number];
+  /** Names of those other stops appear from this zoom; names of the rest from `labelZoom`. */
+  minorLabelZoom?: number;
   /** Pixels a bundle of parallel lines may take at zoom 1; wider ones merge into one stroke until zoomed in. */
   bundleWidth?: number;
 }
@@ -34,58 +38,123 @@ export interface NetworkOptions {
 const mix = (a: Point[], b: Point[], m: number): Point[] =>
   a.map((p, i): Point => [p[0] + (b[i][0] - p[0]) * m, p[1] + (b[i][1] - p[1]) * m]);
 
-export interface TrackPoints {
-  dot: Map<string, LonLat>;    // stop → where to draw it
-  end: Map<string, LonLat>;    // "group stop" → where that group's segments end at the stop
-}
-
 /**
- * Each route's track starts where that route stops, so at a big station the segments' ends lie on
- * different platforms, and the stop itself (often the station building) may be off the track.
- * Within each group, a stop's segments all end at the most central of their track ends; the stop
- * is drawn at that point of its most prominent group (groups that fade in schematic view, the
- * buses, count least), so a bus stop round the corner does not pull a station off its tracks.
+ * One point per stop, where all its segments end: the most central of its segments' track ends,
+ * from its most prominent group (groups that fade in schematic view, the buses, count least).
+ * The fetch step already puts stops there; this keeps older data and hand-written maps in line.
  */
-export function trackPoints({ groups, segments }: NetworkFile): TrackPoints {
+export function trackPoints({ groups, segments }: NetworkFile): Map<string, LonLat> {
   const rank = new Map<string, number>();
-  const sorted = [...groups].sort((a, b) => Number(!a.schematic) - Number(!b.schematic));
-  sorted.forEach((g, i) => g.modes.forEach((m) => { if (!rank.has(m)) rank.set(m, i); }));
-  const groupOf = new Map(sorted.flatMap((g) => g.modes.map((m) => [m, g.id] as const)));
-
-  const ends = new Map<string, LonLat[]>();
-  const best = new Map<string, [rank: number, key: string]>();   // stop → its most prominent group's key
+  [...groups].sort((a, b) => Number(!a.schematic) - Number(!b.schematic))
+    .forEach((g, i) => g.modes.forEach((m) => { if (!rank.has(m)) rank.set(m, i); }));
+  const ends = new Map<string, { rank: number; pts: LonLat[] }>();
   for (const s of segments) {
-    const g = groupOf.get(s.mode);
-    if (!g || !s.geo || s.geo.length < 2) continue;
+    const r = rank.get(s.mode);
+    if (r == null || !s.geo || s.geo.length < 2) continue;
     for (const [stop, p] of [[s.from, s.geo[0]], [s.to, s.geo[s.geo.length - 1]]] as const) {
-      const key = `${g} ${stop}`;
-      ends.set(key, [...(ends.get(key) ?? []), p]);
-      const r = rank.get(s.mode)!;
-      if (!best.has(stop) || r < best.get(stop)![0]) best.set(stop, [r, key]);
+      const e = ends.get(stop);
+      if (!e || r < e.rank) ends.set(stop, { rank: r, pts: [p] });
+      else if (r === e.rank) e.pts.push(p);
     }
   }
-  const end = new Map<string, LonLat>();
-  for (const [key, pts] of ends) {
+  const out = new Map<string, LonLat>();
+  for (const [stop, { pts }] of ends) {
     let pick = pts[0], least = Infinity;
     for (const p of pts) {
       const sum = pts.reduce((t, q) => t + Math.hypot(p[0] - q[0], p[1] - q[1]), 0);
       if (sum < least) { least = sum; pick = p; }
     }
-    end.set(key, pick);
+    out.set(stop, pick);
   }
-  const dot = new Map([...best].map(([stop, [, key]]) => [stop, end.get(key)!] as const));
-  return { dot, end };
+  return out;
 }
 
-export function network({ url, samples = 24, lineWidth = 3, lineGap = 3.5, labelZoom = 2.5, bundleWidth = 10 }: NetworkOptions): Plugin {
+/**
+ * Stops worth showing when zoomed out, per group: where a line ends, or where lines merge, split
+ * or cross (three or more of the group's segments meet). A stop where two groups meet counts too;
+ * that depends on which groups are on, so the renderer works it out as it draws.
+ */
+export function majorStops({ groups, segments }: NetworkFile): Map<string, Set<string>> {
+  const groupOf = new Map(groups.flatMap((g) => g.modes.map((m) => [m, g.id] as const)));
+  const degree = new Map<string, number>(), lineEnds = new Map<string, number>();
+  for (const s of segments) {
+    const g = groupOf.get(s.mode);
+    if (!g) continue;
+    for (const stop of [s.from, s.to]) {
+      degree.set(`${g} ${stop}`, (degree.get(`${g} ${stop}`) ?? 0) + 1);
+      for (const l of s.lines ?? []) {
+        const k = `${g} ${stop} ${typeof l === "string" ? l : l.id}`;
+        lineEnds.set(k, (lineEnds.get(k) ?? 0) + 1);
+      }
+    }
+  }
+  const out = new Map<string, Set<string>>();
+  const mark = (g: string, stop: string) => out.set(stop, (out.get(stop) ?? new Set()).add(g));
+  for (const [k, n] of degree) {
+    const [g, stop] = k.split(" ");
+    if (n !== 2) mark(g, stop);
+  }
+  for (const [k, n] of lineEnds) {
+    const [g, stop] = k.split(" ");
+    if (n === 1) mark(g, stop);
+  }
+  return out;
+}
+
+export function network({
+  url, samples = 24, lineWidth = 3, lineGap = 3.5, labelZoom = 2.5, bundleWidth = 10, stopZoom = [2, 3], minorLabelZoom = 6,
+}: NetworkOptions): Plugin {
   let data: NetworkFile = { groups: [], lines: [], stops: [], segments: [] };
   let segs: Seg[] = [];
   let stops = new Map<string, ProjectedStop>();
   let atStop = new Map<string, Seg[]>();   // group + stop → segments ending there
-  let onTrack: TrackPoints = { dot: new Map(), end: new Map() };   // where stops and segment ends go
+  let onTrack = new Map<string, LonLat>();      // where a stop and its segments' ends go
+  let major = new Map<string, Set<string>>();   // stop → groups in which it matters when zoomed out
+  let groupsAt = new Map<string, Set<string>>();   // stop → groups that serve it
+  let lastCtx: Ctx | undefined;
   let chain: Orientation = { flip: [], prev: [], next: [] };
   let order = new Map<string, number>();
   let widest = new Map<string, number>();   // group id → most lines on one of its segments
+
+  function project(ctx: Ctx) {
+    lastCtx = ctx;
+    const P = ctx.project;
+    const groupOf = new Map(data.groups.flatMap((gd) => gd.modes.map((m) => [m, gd] as const)));
+    const lineById = new Map(data.lines.map((l) => [l.id, l] as const));
+    stops = new Map(data.stops.map((s) => [s.id, { ...s, g: P(onTrack.get(s.id) ?? s.geo), s: P(s.schem ?? s.geo) }] as const));
+
+    segs = data.segments.flatMap((raw, i): Seg[] => {
+      const group = groupOf.get(raw.mode), a = stops.get(raw.from), b = stops.get(raw.to);
+      if (!group || !a || !b) return [];
+      let { from, to } = raw;
+      // Every segment meets the others where its stop is drawn (see trackPoints).
+      const ga = onTrack.get(raw.from) ?? a.geo, gb = onTrack.get(raw.to) ?? b.geo;
+      let geo: LonLat[] = raw.geo ? [ga, ...raw.geo.slice(1, -1), gb] : [ga, gb];
+      let sch: LonLat[] = raw.schem ?? [a.schem ?? a.geo, b.schem ?? b.geo];
+      const flipped = chain.flip[i];
+      if (flipped) {
+        [from, to] = [to, from];
+        geo = [...geo].reverse();
+        sch = [...sch].reverse();
+      }
+      const lines = (raw.lines ?? []).map((l): Strand => {
+        const ref = typeof l === "string" ? { id: l } : l;
+        return { ...ref, color: lineById.get(ref.id)?.color ?? group.color };
+      });
+      return [{
+        i, from, to, start: raw.start, end: raw.end, flipped, group, lines,
+        gp: geo.map(P), sp: sch.map(P),
+        lod: [new Map(), new Map()], morph: new Map(),
+      }];
+    });
+    atStop = new Map();
+    for (const sg of segs) {
+      for (const st of [sg.from, sg.to]) {
+        const k = `${sg.group.id} ${st}`;
+        atStop.set(k, [...(atStop.get(k) ?? []), sg]);
+      }
+    }
+  }
 
   return {
     id: "network",
@@ -98,6 +167,22 @@ export function network({ url, samples = 24, lineWidth = 3, lineGap = 3.5, label
       data.groups.forEach((gd) => ctx.addGroup(gd));
       const groupOf = new Map(data.groups.flatMap((gd) => gd.modes.map((m) => [m, gd.id] as const)));
       onTrack = trackPoints(data);
+      major = majorStops(data);
+      groupsAt = new Map();
+      for (const seg of data.segments) {
+        const g = groupOf.get(seg.mode);
+        if (g) for (const st of [seg.from, seg.to]) groupsAt.set(st, (groupsAt.get(st) ?? new Set()).add(g));
+      }
+      // Finer geometry follows in the background; the map draws with what it has until then.
+      getJson<{ segments?: (LonLat[] | null)[] }>(url.replace(/\.json$/, ".detail.json"))
+        .then((detail) => {
+          const list = detail?.segments;
+          if (!Array.isArray(list) || list.length !== data.segments.length) return;
+          list.forEach((g, i) => { if (Array.isArray(g) && g.length > 1) data.segments[i] = { ...data.segments[i], geo: g }; });
+          onTrack = trackPoints(data);
+          if (lastCtx) { project(lastCtx); lastCtx.redraw(); }
+        })
+        .catch(() => undefined);   // no detail file: the coarse geometry is all there is
       order = lineOrder(data.lines, data.segments);
       const stopGeo = new Map(data.stops.map((st) => [st.id, st.geo] as const));
       chain = orient(data.segments, (seg) => groupOf.get(seg.mode), {
@@ -118,44 +203,7 @@ export function network({ url, samples = 24, lineWidth = 3, lineGap = 3.5, label
       });
     },
 
-    onProject(ctx) {
-      const P = ctx.project;
-      const groupOf = new Map(data.groups.flatMap((gd) => gd.modes.map((m) => [m, gd] as const)));
-      const lineById = new Map(data.lines.map((l) => [l.id, l] as const));
-      stops = new Map(data.stops.map((s) => [s.id, { ...s, g: P(onTrack.dot.get(s.id) ?? s.geo), s: P(s.schem ?? s.geo) }] as const));
-
-      segs = data.segments.flatMap((raw, i): Seg[] => {
-        const group = groupOf.get(raw.mode), a = stops.get(raw.from), b = stops.get(raw.to);
-        if (!group || !a || !b) return [];
-        let { from, to } = raw;
-        // Every segment meets the others where its stop is drawn (see trackPoints).
-        const ga = onTrack.end.get(`${group.id} ${raw.from}`) ?? a.geo, gb = onTrack.end.get(`${group.id} ${raw.to}`) ?? b.geo;
-        let geo: LonLat[] = raw.geo ? [ga, ...raw.geo.slice(1, -1), gb] : [ga, gb];
-        let sch: LonLat[] = raw.schem ?? [a.schem ?? a.geo, b.schem ?? b.geo];
-        const flipped = chain.flip[i];
-        if (flipped) {
-          [from, to] = [to, from];
-          geo = [...geo].reverse();
-          sch = [...sch].reverse();
-        }
-        const lines = (raw.lines ?? []).map((l): Strand => {
-          const ref = typeof l === "string" ? { id: l } : l;
-          return { ...ref, color: lineById.get(ref.id)?.color ?? group.color };
-        });
-        return [{
-          i, from, to, start: raw.start, end: raw.end, flipped, group, lines,
-          gp: geo.map(P), sp: sch.map(P),
-          lod: [new Map(), new Map()], morph: new Map(),
-        }];
-      });
-      atStop = new Map();
-      for (const sg of segs) {
-        for (const st of [sg.from, sg.to]) {
-          const k = `${sg.group.id} ${st}`;
-          atStop.set(k, [...(atStop.get(k) ?? []), sg]);
-        }
-      }
-    },
+    onProject: project,
 
     draw(ctx) {
       const { g, state } = ctx;
@@ -259,20 +307,29 @@ export function network({ url, samples = 24, lineWidth = 3, lineGap = 3.5, label
       g.lineWidth = ctx.px(1.2);
       g.strokeStyle = "#222";
       g.font = `${ctx.px(11)}px system-ui, sans-serif`;
+      // Zoomed out, only stops where something happens: a line ends, lines merge, split or cross,
+      // or two of the groups on show meet. The others fade in as the map zooms in.
+      const minor = clamp01((state.t.k - stopZoom[0]) / (stopZoom[1] - stopZoom[0]));
       for (const id of touched) {
         const st = stops.get(id);
         if (!st) continue;
+        const on = [...(groupsAt.get(id) ?? [])].filter((gid) => ctx.isOn(gid));
+        const big = on.length > 1 || on.some((gid) => major.get(id)?.has(gid));
+        const alpha = big ? 1 : minor;
+        if (alpha <= 0) continue;
+        g.globalAlpha = alpha;
         const [x, y] = ctx.lerp(st.g, st.s);
         g.fillStyle = "#fff";
         g.beginPath();
         g.arc(x, y, ctx.px(3), 0, 2 * Math.PI);
         g.fill();
         g.stroke();
-        if (state.t.k >= labelZoom) {
+        if (state.t.k >= (big ? labelZoom : minorLabelZoom)) {
           g.fillStyle = "#333";
           g.fillText(st.name, x + ctx.px(5), y - ctx.px(4));
         }
       }
+      g.globalAlpha = 1;
 
       const gaps = data.groups
         .filter((gd) => ctx.isOn(gd.id) && gd.coverage?.from && state.year < (toYear(gd.coverage.from) ?? -Infinity))

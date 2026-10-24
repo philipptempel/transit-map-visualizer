@@ -94,9 +94,11 @@ export function toYear(d: DateLike): number | null {
 
 export const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
+/** The JSON at `url`, or null if there is none. Dev servers answer a missing file with their HTML page. */
 export async function getJson<T>(url: string): Promise<T | null> {
   const res = await fetch(url);
-  return res.ok ? ((await res.json()) as T) : null;
+  if (!res.ok || !res.headers.get("content-type")?.includes("json")) return null;
+  return (await res.json()) as T;
 }
 
 export function resample(pts: Point[], n: number): Point[] {
