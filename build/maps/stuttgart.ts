@@ -12,8 +12,6 @@ export default {
   overrides: [
     { match: { ref: /^10$/, route: /^tram$/ }, mode: "rack_railway" },   // Zacke
   ],
-  // No heritage services on any map. Trams 21 and 23 are SSB's heritage lines; excluded here in
-  // case their OSM tags do not say so.
-  exclude: [{ ref: /^2[13]$/, route: /^tram$/ }],
+  // The heritage trams 21 and 23 are tagged as such in OSM and left out like every heritage service.
   lineColors: { bus: "#e2001a" },   // SSB red, for every bus line
 } satisfies MapConfig;

@@ -120,7 +120,9 @@ async function buildOne(cfg: MapConfig, cmd: Extract<Command, { cmd: "build" }>,
   try {
     for (const stage of cmd.only) {
       const r = await RUN[stage](ctx);
-      lines.push(`${stage}: ${r.status}${r.note ? ` (${r.note})` : ""}`, ...(r.details ?? []).map((d) => `  ${d}`));
+      // Whether the files changed, so a rebuild from the cache shows it reproduces them byte for byte.
+      const wrote = r.status !== "done" ? "" : r.changed ? (cmd.dryRun ? ", would change files" : ", files written") : ", files unchanged";
+      lines.push(`${stage}: ${r.status}${wrote}${r.note ? ` (${r.note})` : ""}`, ...(r.details ?? []).map((d) => `  ${d}`));
       r.attribution?.forEach((a) => attribution.add(a));
       changed ||= !!r.changed;
     }
