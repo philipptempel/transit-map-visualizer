@@ -1,5 +1,5 @@
 import { type MouseEvent, useEffect, useRef, useState } from "react";
-import { ArrowLeft, FastForward, Minus, Pause, Play, Plus, Rewind } from "lucide-react";
+import { ArrowLeft, FastForward, Minus, Pause, Play, Plus, Rewind, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup, ButtonGroupText } from "@/components/ui/button-group";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -17,6 +17,10 @@ import { createRenderer, type Renderer, type Snapshot } from "@/renderer";
 import type { MapEntry, ToggleGroup as Group } from "@/schema";
 
 const SPEEDS = [0.25, 0.5, 1, 2, 4, 8];
+const ZOOM_STEP = 1.5;   // per click or key press
+
+/** "0.5×", "2.4×", "12×": one decimal while it matters. */
+const zoomLabel = (k: number) => `${k < 10 ? k.toFixed(1) : Math.round(k)}×`;
 
 /** Moves `by` steps along SPEEDS, faster when positive, keeping the direction. */
 function nudge(speed: number, by: number) {
@@ -92,6 +96,9 @@ function MapView({ map, maps }: { map: MapEntry; maps: MapEntry[] }) {
     if (r) playAt(Math.sign(r.state.speed) === dir ? nudge(r.state.speed, 1) : dir);
   };
   const changeSpeed = (by: 1 | -1) => r?.setSpeed(nudge(r.state.speed, by));
+  const zoomIn = () => r?.zoomBy(ZOOM_STEP);
+  const zoomOut = () => r?.zoomBy(1 / ZOOM_STEP);
+  const resetZoom = () => r?.resetZoom();
 
   const loaded = snap !== null;
   useEffect(() => {
@@ -102,6 +109,10 @@ function MapView({ map, maps }: { map: MapEntry; maps: MapEntry[] }) {
       "]": () => changeSpeed(1),
       ArrowLeft: () => step(-1),
       ArrowRight: () => step(1),
+      "+": zoomIn,
+      "=": zoomIn,   // + without Shift on US-style layouts
+      "-": zoomOut,
+      "0": resetZoom,
     };
     const onKey = (e: KeyboardEvent) => {
       // Alt is allowed: some layouts, such as German on a Mac, type [ and ] with it.
@@ -153,6 +164,27 @@ function MapView({ map, maps }: { map: MapEntry; maps: MapEntry[] }) {
       {/* The notes float over the map so the canvas keeps its size when they come and go. */}
       <div className="relative min-h-0">
         <canvas ref={canvas} id="map" className="absolute inset-0 block size-full touch-none bg-map" />
+        {snap && (
+          <div id="zoom" className="absolute top-2 right-2 flex flex-col items-center gap-2 rounded-md bg-background/80 p-1 shadow-xs backdrop-blur-sm">
+            <Button variant="ghost" size="icon-sm" aria-label="Zoom in" title="Zoom in (+)"
+              disabled={snap.zoom >= snap.zoomRange[1] * 0.999} onClick={zoomIn} {...keepFocus}>
+              <ZoomIn />
+            </Button>
+            <Slider
+              orientation="vertical" aria-label="Zoom" step={0.01}
+              min={Math.log2(snap.zoomRange[0])} max={Math.log2(snap.zoomRange[1])} value={[Math.log2(snap.zoom)]}
+              onValueChange={([v]) => r?.zoomTo(2 ** v)}
+            />
+            <Button variant="ghost" size="icon-sm" aria-label="Zoom out" title="Zoom out (−)"
+              disabled={snap.zoom <= snap.zoomRange[0] * 1.001} onClick={zoomOut} {...keepFocus}>
+              <ZoomOut />
+            </Button>
+            <Button variant="ghost" size="sm" className="h-6 w-full px-1 text-xs tabular-nums" title="Reset zoom (0)"
+              aria-label={`Zoom ${zoomLabel(snap.zoom)}, reset`} onClick={resetZoom} {...keepFocus}>
+              {zoomLabel(snap.zoom)}
+            </Button>
+          </div>
+        )}
         <div className="pointer-events-none absolute inset-x-2 bottom-2 flex flex-wrap items-end justify-between gap-2 text-xs text-muted-foreground">
           {!!snap?.badges.length && (
             <ul id="badges" className="rounded-md bg-background/80 px-2 py-1 shadow-xs backdrop-blur-sm">

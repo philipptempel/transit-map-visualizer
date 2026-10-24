@@ -1,6 +1,12 @@
-import type { Segment } from "../schema";
+import type { Line, Segment } from "../schema";
 
 const lineIds = (s: Segment) => new Set((s.lines ?? []).map((l) => (typeof l === "string" ? l : l.id)));
+
+export interface Orientation {
+  flip: boolean[];                    // draw from `to` back to `from`
+  prev: (number | undefined)[];       // the segment this one continues, at its drawn start
+  next: (number | undefined)[];       // the segment that continues this one, at its drawn end
+}
 
 /**
  * Which segments to draw reversed (from `to` back to `from`), so that parallel lines keep their
@@ -11,7 +17,7 @@ const lineIds = (s: Segment) => new Set((s.lines ?? []).map((l) => (typeof l ===
  * neighbour, if the stop joins just two), and the direction carries along these chains. Only
  * segments with the same `key` (the group they are drawn in) are chained; `undefined` skips one.
  */
-export function orient(segs: Segment[], key: (s: Segment) => string | undefined): boolean[] {
+export function orient(segs: Segment[], key: (s: Segment) => string | undefined): Orientation {
   const lines = segs.map(lineIds);
   const at = new Map<string, number[]>();   // group + stop → segments touching it
   segs.forEach((s, i) => {
@@ -60,5 +66,23 @@ export function orient(segs: Segment[], key: (s: Segment) => string | undefined)
       }
     }
   }
-  return flip.map((f) => !!f);
+  const flips = flip.map((f) => !!f);
+  const neighbour = (x: number, end: boolean) => {
+    const stop = flips[x] === end ? segs[x].from : segs[x].to;
+    return links[x].find(([, at]) => at === stop)?.[0];
+  };
+  return { flip: flips, prev: segs.map((_, x) => neighbour(x, false)), next: segs.map((_, x) => neighbour(x, true)) };
+}
+
+/** Lines in the order they sit across a bundle: by ref, numbers compared as numbers (S2 before S11). */
+export function lineOrder(lines: Line[]): Map<string, number> {
+  const sorted = [...lines].sort((a, b) =>
+    (a.ref ?? "").localeCompare(b.ref ?? "", "en", { numeric: true }) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return new Map(sorted.map((l, i) => [l.id, i]));
+}
+
+/** Offsets across a bundle of these lines, centred, in `order`, `gap` apart. */
+export function slots(ids: Iterable<string>, order: Map<string, number>, gap: number): Map<string, number> {
+  const sorted = [...new Set(ids)].sort((a, b) => (order.get(a) ?? Infinity) - (order.get(b) ?? Infinity) || (a < b ? -1 : 1));
+  return new Map(sorted.map((id, i) => [id, (i - (sorted.length - 1) / 2) * gap]));
 }

@@ -47,7 +47,13 @@ export interface Plugin {
   draw?(ctx: Ctx): void;
 }
 
-export interface Snapshot { year: number; morph: number; playing: boolean; speed: number; range: [number, number]; badges: string[] }
+export interface Snapshot {
+  year: number; morph: number; playing: boolean; speed: number; range: [number, number]; badges: string[];
+  zoom: number; zoomRange: [number, number];
+}
+
+/** How far the map zooms out and in, relative to the map's bbox fitting the canvas. */
+export const ZOOM_RANGE: [number, number] = [0.5, 50];
 
 export interface RendererOptions {
   canvas: HTMLCanvasElement; map: MapEntry; plugins: Plugin[];
@@ -69,6 +75,11 @@ export interface Renderer {
   pause(): void;
   setSpeed(speed: number): void;
   setMode(target: 0 | 1, ms?: number): void;
+  /** Zoom about the centre of the canvas, within ZOOM_RANGE. They do nothing before `ready`. */
+  zoomBy(factor: number): void;
+  zoomTo(k: number): void;
+  /** Back to the whole map, centred. */
+  resetZoom(): void;
   onChange(cb: (s: Snapshot) => void): () => void;
 }
 
@@ -115,12 +126,15 @@ export function cutAt(pts: Point[], f: number): Point[] {
   return out;
 }
 
-export function offset(pts: Point[], d: number): Point[] {
+/** Shifts a line sideways by `d`, or by `d(i)` at point i, to the left of its direction. */
+export function offset(pts: Point[], d: number | ((i: number) => number)): Point[] {
   if (!d) return pts;
+  const at = typeof d === "number" ? () => d : d;
   return pts.map((p, i): Point => {
     const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
     const dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy) || 1;
-    return [p[0] - (dy / len) * d, p[1] + (dx / len) * d];
+    const di = at(i);
+    return [p[0] - (dy / len) * di, p[1] + (dx / len) * di];
   });
 }
 
@@ -142,6 +156,9 @@ export function createRenderer({
   const range: [number, number] = [Infinity, -Infinity];
   let frame = 0;
   let run = 0;   // bumped on every play(), so a loop from an earlier play() stops
+  const zoomer = zoom<HTMLCanvasElement, unknown>().scaleExtent(ZOOM_RANGE);
+  const canvasSel = select(canvas);
+  let zoomReady = false;
 
   const ctx: Ctx = {
     g, map, state, projection,
@@ -182,6 +199,7 @@ export function createRenderer({
     const snap: Snapshot = {
       year: state.year, morph: state.morph, playing: state.playing, speed: state.speed,
       range: [range[0], range[1]], badges: [...badges.values()],
+      zoom: t.k, zoomRange: ZOOM_RANGE,
     };
     listeners.forEach((cb) => cb(snap));
   }
@@ -245,11 +263,9 @@ export function createRenderer({
     if (!Number.isFinite(range[0])) range[0] = 1900;
     range[1] = Math.max(range[1], new Date().getFullYear());
     state.year = range[0];
-    select(canvas).call(
-      zoom<HTMLCanvasElement, unknown>()
-        .scaleExtent([0.5, 50])
-        .on("zoom", (e: D3ZoomEvent<HTMLCanvasElement, unknown>) => { state.t = e.transform; schedule(); }),
-    );
+    zoomer.on("zoom", (e: D3ZoomEvent<HTMLCanvasElement, unknown>) => { state.t = e.transform; schedule(); });
+    canvasSel.call(zoomer);
+    zoomReady = true;
     new ResizeObserver(resize).observe(canvas);
   })();
 
@@ -268,6 +284,9 @@ export function createRenderer({
     pause() { state.playing = false; schedule(); },
     setSpeed(speed) { state.speed = speed; schedule(); },
     setMode,
+    zoomBy(factor) { if (zoomReady) zoomer.scaleBy(canvasSel, factor); },
+    zoomTo(k) { if (zoomReady) zoomer.scaleTo(canvasSel, k); },
+    resetZoom() { if (zoomReady) zoomer.transform(canvasSel, zoomIdentity); },
     onChange(cb) { listeners.add(cb); return () => { listeners.delete(cb); }; },
   };
 }

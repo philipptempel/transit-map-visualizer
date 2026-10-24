@@ -1,6 +1,6 @@
-import { cutAt, getJson, offset, resample, toYear, type Plugin, type Point } from "../renderer";
+import { cutAt, getJson, offset, resample, toYear, type Life, type Plugin, type Point } from "../renderer";
 import type { DateLike, GroupDef, LonLat, NetworkFile, Stop } from "../schema";
-import { orient } from "./orient";
+import { lineOrder, orient, slots, type Orientation } from "./orient";
 
 declare module "../renderer" {
   interface Services {
@@ -12,6 +12,7 @@ declare module "../renderer" {
 interface Strand { id?: string; color: string; start?: DateLike; end?: DateLike }
 interface ProjectedStop extends Stop { g: Point; s: Point }
 interface Seg {
+  i: number;                       // index in the network file
   from: string; to: string; start?: DateLike; end?: DateLike;
   /** Drawn from `to` to `from` to keep parallel lines on their side, so it grows back from the far end. */
   flipped: boolean;
@@ -27,7 +28,8 @@ export function network({ url, samples = 24, lineWidth = 3, lineGap = 3.5, label
   let data: NetworkFile = { groups: [], lines: [], stops: [], segments: [] };
   let segs: Seg[] = [];
   let stops = new Map<string, ProjectedStop>();
-  let flips: boolean[] = [];
+  let chain: Orientation = { flip: [], prev: [], next: [] };
+  let order = new Map<string, number>();
 
   return {
     id: "network",
@@ -39,7 +41,8 @@ export function network({ url, samples = 24, lineWidth = 3, lineGap = 3.5, label
       data = json;
       data.groups.forEach((gd) => ctx.addGroup(gd));
       const groupOf = new Map(data.groups.flatMap((gd) => gd.modes.map((m) => [m, gd.id] as const)));
-      flips = orient(data.segments, (seg) => groupOf.get(seg.mode));
+      chain = orient(data.segments, (seg) => groupOf.get(seg.mode));
+      order = lineOrder(data.lines);
       [...data.segments, ...data.stops].forEach((x) => ctx.extendRange(x.start, x.end));
       // A group's data starts at its coverage, so a map of today's network alone opens on today.
       data.groups.forEach((gd) => ctx.extendRange(gd.coverage?.from));
@@ -61,20 +64,18 @@ export function network({ url, samples = 24, lineWidth = 3, lineGap = 3.5, label
         let { from, to } = raw;
         let geo: LonLat[] = raw.geo ?? [a.geo, b.geo];
         let sch: LonLat[] = raw.schem ?? [a.schem ?? a.geo, b.schem ?? b.geo];
-        const flipped = flips[i];
+        const flipped = chain.flip[i];
         if (flipped) {
           [from, to] = [to, from];
           geo = [...geo].reverse();
           sch = [...sch].reverse();
         }
-        const lines = (raw.lines ?? [])
-          .map((l): Strand => {
-            const ref = typeof l === "string" ? { id: l } : l;
-            return { ...ref, color: lineById.get(ref.id)?.color ?? group.color };
-          })
-          .sort((x, y) => ((x.id ?? "") < (y.id ?? "") ? -1 : 1));
+        const lines = (raw.lines ?? []).map((l): Strand => {
+          const ref = typeof l === "string" ? { id: l } : l;
+          return { ...ref, color: lineById.get(ref.id)?.color ?? group.color };
+        });
         return [{
-          from, to, start: raw.start, end: raw.end, flipped, group, lines,
+          i, from, to, start: raw.start, end: raw.end, flipped, group, lines,
           ga: resample(geo.map(P), samples),
           sa: resample(sch.map(P), samples),
         }];
@@ -89,24 +90,38 @@ export function network({ url, samples = 24, lineWidth = 3, lineGap = 3.5, label
       g.lineJoin = "round";
       g.lineWidth = ctx.px(lineWidth);
 
+      // Which lines run on each visible segment this year; a stop's layout depends on both sides.
+      const shown = new Map<number, { s: Seg; life: Life; vis: number; strands: Strand[] }>();
       for (const s of segs) {
         if (!ctx.isOn(s.group.id)) continue;
         const vis = s.group.schematic ? 1 : 1 - state.morph;
         const life = ctx.life(s.start, s.end);
         if (vis <= 0.01 || life.alpha <= 0) continue;
-        const full = mix(s.ga, s.sa, state.morph);
-        // Grow from the segment's own `from`; cut a flipped one from the far end and turn it back.
-        const path = s.flipped ? cutAt(full.reverse(), life.grow).reverse() : cutAt(full, life.grow);
         const running = s.lines.filter((l) => ctx.life(l.start, l.end).alpha > 0);
-        const strands: Strand[] = running.length ? running : [{ color: s.group.color }];
+        shown.set(s.i, { s, life, vis, strands: running.length ? running : [{ color: s.group.color }] });
+      }
+      const ids = (strands: Strand[]) => strands.flatMap((l) => (l.id ? [l.id] : []));
+
+      for (const { s, life, vis, strands } of shown.values()) {
+        // At each end, lay out this segment's lines together with those of the segment it chains
+        // into there, so a line running through the stop keeps its place; in between, ease across.
+        const own = ids(strands);
+        const atEnd = (other: number | undefined) =>
+          slots([...own, ...ids(shown.get(other ?? -1)?.strands ?? [])], order, gap);
+        const d0 = atEnd(chain.prev[s.i]), d1 = atEnd(chain.next[s.i]);
+        const full = mix(s.ga, s.sa, state.morph);
+        const last = full.length - 1;
         g.globalAlpha = life.alpha * vis;
-        strands.forEach((l, i) => {
-          const pts = offset(path, (i - (strands.length - 1) / 2) * gap);
+        for (const l of strands) {
+          const a = (l.id && d0.get(l.id)) || 0, b = (l.id && d1.get(l.id)) || 0;
+          const pts = offset(full, (k) => { const t = k / last; return a + (b - a) * t * t * (3 - 2 * t); });
+          // Grow from the segment's own `from`; cut a flipped one from the far end and turn it back.
+          const path = s.flipped ? cutAt(pts.reverse(), life.grow).reverse() : cutAt(pts, life.grow);
           g.strokeStyle = l.color;
           g.beginPath();
-          pts.forEach(([x, y], k) => (k ? g.lineTo(x, y) : g.moveTo(x, y)));
+          path.forEach(([x, y], k) => (k ? g.lineTo(x, y) : g.moveTo(x, y)));
           g.stroke();
-        });
+        }
         if (life.alpha * vis > 0.5) {
           const [head, tail] = s.flipped ? [s.to, s.from] : [s.from, s.to];
           touched.add(head);

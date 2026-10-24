@@ -82,9 +82,12 @@ On the map page:
   changing direction. The slider jumps to a specific year.
 - **Keyboard:** Space plays and pauses, `[` and `]` halve and double the
   speed (from 0.25× to 8×), and the left and right arrow keys step one year.
+  `+` and `-` zoom in and out, and `0` resets the zoom.
 - **Geographic / Schematic** morphs between the two layouts.
 - **Checkboxes** in the header toggle mode groups and landmarks.
-- **Scroll and drag** to zoom and pan. Station names appear once you zoom in.
+- **Scroll and drag** to zoom and pan, or use the zoom control in the top-right
+  corner: its slider shows how far in you are, between 0.5× and 50×, and the
+  number below resets the view. Station names appear once you zoom in.
 - **Notes** in the bottom-left corner of the map say which base map is shown
   and where a group's data does not reach back to the year on screen. The
   bottom-right corner credits the map's data sources.
@@ -100,6 +103,11 @@ drawing happens in plugins, which run in order:
 | `basemap`   | 0     | Land, water, roads and so on, from the closest snapshot    |
 | `network`   | 10    | Line segments, parallel lines side by side, and stations   |
 | `landmarks` | 20    | Points of interest, which follow a station in schematic view |
+
+Lines that share track are drawn side by side, ordered by their `ref` (S1,
+S2, … S11) and chained from segment to segment so each keeps its side. Where a
+line starts or ends at a stop, the others keep their places at the stop and
+ease into their new ones along the next segment instead of jumping.
 
 A plugin can implement `init` (load data, register toggle groups, widen the
 year range), `onProject` (re-project after a resize) and `draw`. Plugins share
