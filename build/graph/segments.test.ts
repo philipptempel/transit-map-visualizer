@@ -4,7 +4,7 @@ import { demostadt } from "../__fixtures__/load";
 import { classify } from "../classify";
 import type { MapConfig } from "../config";
 import { routes, stopCandidates } from "../sources/osm";
-import { buildSegments, joinWays, type RouteForGraph } from "./segments";
+import { axis, buildSegments, joinWays, stopAxes, type RouteForGraph } from "./segments";
 import { dedupeStops } from "./stops";
 
 const cfg: MapConfig = {
@@ -78,5 +78,20 @@ describe("buildSegments", () => {
       { line: "a", mode: "tram", path: [], stops: [{ stop: "y", geo: [0, 1] }, { stop: "x", geo: [0, 0] }] },
     ]);
     expect(two).toEqual([{ from: "x", to: "y", mode: "tram", lines: ["a", "b"] }]);
+  });
+});
+
+describe("stopAxes", () => {
+  it("measures which way the track runs where each route stops, ignoring the direction of travel", () => {
+    expect(axis([0, 0], [1, 0])).toBe(0);
+    expect(axis([1, 0], [0, 0])).toBe(0);
+    expect(axis([0, 0], [0, 1])).toBe(90);
+    const axes = stopAxes([{
+      path: [[[0, 0], [0.01, 0]], [[0.01, 0], [0.01, 0.01]]],   // east, then north
+      stops: [{ id: "a", geo: [0.002, 0] }, { id: "b", geo: [0.01, 0.006] }, { id: "far", geo: [0.5, 0.5] }],
+    }]);
+    expect(axes.get("a")).toEqual([0]);
+    expect(axes.get("b")).toEqual([90]);
+    expect(axes.has("far")).toBe(false);
   });
 });

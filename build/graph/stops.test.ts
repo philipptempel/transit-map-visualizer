@@ -32,3 +32,32 @@ describe("dedupeStops", () => {
     expect(d.stops).toHaveLength(2);
   });
 });
+
+describe("dedupeStops with track directions", () => {
+  // 0.001° is about 111 m. Two platforms called "Berliner Platz", 120 m apart.
+  const ns = { id: "n1", name: "Berliner Platz", geo: [0, 0] as [number, number] };
+  const ew = { id: "n2", name: "Berliner Platz", geo: [0.00108, 0] as [number, number] };
+
+  it("keeps platforms apart whose tracks cross", () => {
+    const d = dedupeStops([ns, ew], 300, new Map([["n1", [90]], ["n2", [0, 180]]]));
+    expect(d.stops.map((s) => [s.id, s.name])).toEqual([["n1", "Berliner Platz"], ["n2", "Berliner Platz"]]);
+  });
+
+  it("merges them when their tracks run the same way, or they are within 30 m", () => {
+    expect(dedupeStops([ns, ew], 300, new Map([["n1", [85]], ["n2", [100]]])).stops).toHaveLength(1);
+    const close = { ...ew, geo: [0.0002, 0] as [number, number] };   // 22 m
+    expect(dedupeStops([ns, close], 300, new Map([["n1", [90]], ["n2", [0]]])).stops).toHaveLength(1);
+  });
+
+  it("does not let a platform without a direction bridge the two", () => {
+    const mid = { id: "n3", name: "Berliner Platz", geo: [0.00054, 0] as [number, number] };
+    const d = dedupeStops([ns, ew, mid], 300, new Map([["n1", [90]], ["n2", [0]]]));
+    expect(d.stops).toHaveLength(2);
+  });
+
+  it("gives a split stop area's id to one part only", () => {
+    const area = { id: "r9", name: "Berliner Platz" };
+    const d = dedupeStops([{ ...ns, area }, { ...ew, area }], 300, new Map([["n1", [90]], ["n2", [0]]]));
+    expect(d.stops.map((s) => s.id)).toEqual(["n2", "r9"]);
+  });
+});

@@ -87,3 +87,31 @@ export function buildSegments(routes: RouteForGraph[], snap = 150): Segment[] {
   }
   return [...byKey.values()];
 }
+
+/** Track direction as an angle in degrees, 0 to 180: which way a track runs, not which way it is driven. */
+export function axis(a: LonLat, b: LonLat): number {
+  const k = Math.cos((a[1] * Math.PI) / 180);
+  const deg = (Math.atan2(b[1] - a[1], (b[0] - a[0]) * k) * 180) / Math.PI;
+  return ((deg % 180) + 180) % 180;
+}
+
+/**
+ * The direction of the track at each stop candidate, from every route that stops there (within
+ * `snap` metres of its track). Two platforms with one name but tracks at right angles are two
+ * places, such as the north–south and east–west platforms of an interchange.
+ */
+export function stopAxes(routes: { stops: { id: string; geo: LonLat }[]; path: LonLat[][] }[], snap = 150): Map<string, number[]> {
+  const out = new Map<string, number[]>();
+  for (const r of routes) {
+    const line = joinWays(r.path).flat().filter((p, i, all) => i === 0 || !same(p, all[i - 1]));
+    if (line.length < 2) continue;
+    let at: At = { i: 0, t: 0, d: 0 };
+    for (const s of r.stops) {
+      const here = locate(line, s.geo, at);
+      if (here.d > snap) continue;
+      at = here;
+      out.set(s.id, [...(out.get(s.id) ?? []), axis(line[here.i], line[here.i + 1])]);
+    }
+  }
+  return out;
+}

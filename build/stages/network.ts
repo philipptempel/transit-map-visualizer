@@ -7,7 +7,7 @@ import { classify, included, isCoach, isHeritage, test } from "../classify";
 import { DEFAULT_GROUPS, SCOPE_TYPE, type MapConfig } from "../config";
 import { anchorStops, snapEnds } from "../graph/anchor";
 import { metres } from "../graph/geo";
-import { buildSegments, type RouteForGraph } from "../graph/segments";
+import { buildSegments, stopAxes, type RouteForGraph } from "../graph/segments";
 import { PRECISION, roundPoint, tidy } from "../graph/simplify";
 import { dedupeStops } from "../graph/stops";
 import { compareIds, OsmIndex, routes, stopCandidates, type RouteRecord, type Tags } from "../sources/osm";
@@ -125,8 +125,16 @@ export function buildNetwork(osm: OsmIndex, cfg: MapConfig, year: number, budget
 
   // Stops and segments.
   const cands = stopCandidates(osm, kept.map((k) => k.r));
-  const { stops: graphStops, stopOf } = dedupeStops(cands);
   const candGeo = new Map(cands.map((c) => [c.id, c.geo] as const));
+  // Which way the track runs at each platform, so platforms on crossing streets stay apart.
+  const axes = stopAxes(kept.map(({ r }) => ({
+    stops: r.stops.filter((s) => candGeo.has(s)).map((s) => ({ id: s, geo: candGeo.get(s)! })),
+    path: r.path,
+  })));
+  const { stops: graphStops, stopOf } = dedupeStops(cands, 300, axes);
+  const twins = [...new Set(graphStops.filter((a) => graphStops.some((b) =>
+    a !== b && a.name && a.name === b.name && metres(a.geo, b.geo) <= 300)).map((st) => st.name))].sort();
+  if (twins.length) report.push(`stops split where their tracks cross: ${twins.length}, e.g. ${twins.slice(0, 6).join("; ")}`);
   const forGraph: RouteForGraph[] = kept.map(({ r, mode }) => ({
     line: lineOf.get(r.id)!,
     mode,
