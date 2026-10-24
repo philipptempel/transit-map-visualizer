@@ -23,7 +23,8 @@
   {
     "id": "rotterdam", "name": "Rotterdam", "bbox": [4.3, 51.83, 4.65, 52],
     "type": "local", "network": "transit", "continent": "Europe", "country": "NL", "state": "Zuid-Holland",
-    "status": "planned"
+    "updated": "2026-10-24", "status": "planned",
+    "attribution": ["© OpenStreetMap contributors"]
   },
   {
     "id": "france-rail", "name": "France (rail)", "bbox": [-5.2, 41.3, 9.6, 51.1],
