@@ -183,7 +183,7 @@ export function network({
           if (lastCtx) { project(lastCtx); lastCtx.redraw(); }
         })
         .catch(() => undefined);   // no detail file: the coarse geometry is all there is
-      order = lineOrder(data.lines, data.segments);
+      order = lineOrder(data.lines, data.segments, (seg) => groupOf.get(seg.mode));
       const stopGeo = new Map(data.stops.map((st) => [st.id, st.geo] as const));
       chain = orient(data.segments, (seg) => groupOf.get(seg.mode), {
         order,
@@ -310,6 +310,7 @@ export function network({
       // Zoomed out, only stops where something happens: a line ends, lines merge, split or cross,
       // or two of the groups on show meet. The others fade in as the map zooms in.
       const minor = clamp01((state.t.k - stopZoom[0]) / (stopZoom[1] - stopZoom[0]));
+      const labelled = new Map<string, Point[]>();
       for (const id of touched) {
         const st = stops.get(id);
         if (!st) continue;
@@ -324,9 +325,12 @@ export function network({
         g.arc(x, y, ctx.px(3), 0, 2 * Math.PI);
         g.fill();
         g.stroke();
-        if (state.t.k >= (big ? labelZoom : minorLabelZoom)) {
+        // A station split into platforms on crossing streets has one name: write it once.
+        const twin = labelled.get(st.name)?.some(([lx, ly]) => Math.hypot(lx - x, ly - y) < ctx.px(80));
+        if (!twin && state.t.k >= (big ? labelZoom : minorLabelZoom)) {
           g.fillStyle = "#333";
           g.fillText(st.name, x + ctx.px(5), y - ctx.px(4));
+          labelled.set(st.name, [...(labelled.get(st.name) ?? []), [x, y]]);
         }
       }
       g.globalAlpha = 1;

@@ -91,18 +91,28 @@ export function orient(segs: Segment[], key: (s: Segment) => string | undefined,
       const idx = at.get(id)!;
       if (idx.length < 3) continue;
       const stop = (JSON.parse(id) as [string, string])[1];
-      // The bundle through the stop, in drawing order, and the direction it runs there.
+      // The bundle through the stop, in drawing order. Where branches go is judged by where they end
+      // up (their far ends), not their first metres: lines often run side by side before parting.
       const bundle = slots([...lines[a], ...lines[c]], opts.order, 1);
-      const dir = heading(opts.geo(a), segs[a].to === stop, !!flip[a]);
+      const far = (i: number): LonLat => {
+        const pts = opts.geo!(i), p = segs[i].from === stop ? pts[pts.length - 1] : pts[0];
+        const x = segs[i].from === stop ? pts[0] : pts[pts.length - 1];
+        return [p[0] - x[0], p[1] - x[1]];
+      };
       for (const b of idx) {
         if (b === a || b === c) continue;
         const branching = [...lines[b]].filter((l) => bundle.has(l));
         if (!branching.length) continue;
         const side = branching.reduce((sum, l) => sum + bundle.get(l)!, 0) / branching.length;
-        const pts = opts.geo(b), out = segs[b].from === stop ? pts : [...pts].reverse();
-        const ray: LonLat = [out[1][0] - out[0][0], out[1][1] - out[0][1]];
+        // The pair member carrying b's lines is the host; b parts from the other one.
+        const inA = branching.filter((l) => lines[a].has(l)).length, inC = branching.filter((l) => lines[c].has(l)).length;
+        const [host, other] = inA >= inC ? [a, c] : [c, a];
+        const vo = far(other), vb = far(b);
+        const left = vo[0] * vb[1] - vo[1] * vb[0];   // > 0: b lies to the left of other, seen from the stop
+        // Arriving along the host, left is left of travel; leaving along it, travel faces the other way.
         // Positive offsets lie to the right of the drawing direction, so a left turn wants negative ones.
-        const turn = dir[0] * ray[1] - dir[1] * ray[0];
+        const hostArrives = (flip[host] ? segs[host].from : segs[host].to) === stop;
+        const turn = hostArrives ? left : -left;
         if (side && turn) votes[chainOf[a]] += (side * turn < 0 ? 1 : -1) * branching.length;
       }
     }
@@ -117,19 +127,20 @@ export function orient(segs: Segment[], key: (s: Segment) => string | undefined,
   return { flip: flips, prev: segs.map((_, x) => neighbour(x, false)), next: segs.map((_, x) => neighbour(x, true)) };
 }
 
-/** The drawing direction of a segment at one of its stops (lon/lat, so north is +y). */
-function heading(pts: LonLat[], atTo: boolean, flipped: boolean): LonLat {
-  const [p, q] = atTo ? [pts[pts.length - 2], pts[pts.length - 1]] : [pts[0], pts[1]];
-  const d: LonLat = [q[0] - p[0], q[1] - p[1]];   // the way the segment is written, from → to
-  return flipped ? [-d[0], -d[1]] : d;
-}
-
 /**
- * Lines in the order they sit across a bundle. Lines that share most of their track sit side by
- * side, so where they branch off together they need not cross the others; otherwise by ref,
- * numbers compared as numbers (S2 before S11).
+ * Lines in the order they sit across a bundle, so that where lines part, the ones that leave
+ * together sit together and need not cross the others.
+ *
+ * At every stop, for every two segments that share some lines, those shared lines should be
+ * adjacent within the other segment's bundle (at Vaihinger Straße, U3, U8 and U12 leave together,
+ * so they should not have U5 between them). The order starts from a greedy chain of lines that are
+ * alike (Jaccard on their segments; otherwise by ref, S2 before S11) and is then improved by moving
+ * lines and short runs of lines around while that satisfies more of those conditions, for groups
+ * of up to `maxSearch` lines that share track (larger ones, the buses, keep the greedy order).
  */
-export function lineOrder(lines: Line[], segments: Segment[] = []): Map<string, number> {
+export function lineOrder(
+  lines: Line[], segments: Segment[] = [], key: (s: Segment) => string | undefined = () => "", maxSearch = 60,
+): Map<string, number> {
   const byRef = [...lines].sort((a, b) =>
     (a.ref ?? "").localeCompare(b.ref ?? "", "en", { numeric: true }) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const count = new Map<string, number>();
@@ -145,12 +156,13 @@ export function lineOrder(lines: Line[], segments: Segment[] = []): Map<string, 
       }
     }
   }
-  // Greedy: after each line, the unplaced one most alike (Jaccard on segments); none alike, the next by ref.
+  // Greedy: after each line, the unplaced one most alike; none alike, the next by ref.
   const rank = new Map(byRef.map((l, i) => [l.id, i]));
-  const placed = new Map<string, number>();
+  const greedy: string[] = [];
+  const placed = new Set<string>();
   let last: string | undefined;
   let cursor = 0;
-  while (placed.size < byRef.length) {
+  while (greedy.length < byRef.length) {
     let pick: string | undefined, best = 0;
     for (const [y, n] of (last && shared.get(last)) || []) {
       if (placed.has(y)) continue;
@@ -161,10 +173,85 @@ export function lineOrder(lines: Line[], segments: Segment[] = []): Map<string, 
       while (placed.has(byRef[cursor].id)) cursor++;
       pick = byRef[cursor].id;
     }
-    placed.set(pick, placed.size);
+    greedy.push(pick);
+    placed.add(pick);
     last = pick;
   }
-  return placed;
+
+  // The conditions: [bundle, the lines in it that should sit together].
+  const at = new Map<string, Set<string>[]>();
+  for (const s of segments) {
+    const k = key(s), ids = lineIds(s);
+    if (k == null || ids.size < 1) continue;
+    for (const stop of [s.from, s.to]) {
+      const id = JSON.stringify([k, stop]);
+      at.set(id, [...(at.get(id) ?? []), ids]);
+    }
+  }
+  const seen = new Set<string>();
+  const rules: [bundle: string[], together: Set<string>][] = [];
+  for (const sets of at.values()) {
+    for (const t of sets) {
+      for (const u of sets) {
+        if (t === u) continue;
+        const both = [...t].filter((l) => u.has(l));
+        if (both.length < 2 || both.length === t.size) continue;   // nothing to keep together
+        const id = `${[...t].sort().join(",")}|${both.sort().join(",")}`;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        rules.push([[...t], new Set(both)]);
+      }
+    }
+  }
+
+  // Groups of lines that share track; each is ordered on its own.
+  const parent = new Map<string, string>();
+  const find = (x: string): string => { const p = parent.get(x) ?? x; if (p === x) return x; const r = find(p); parent.set(x, r); return r; };
+  for (const s of segments) {
+    const ids = [...lineIds(s)];
+    for (const x of ids.slice(1)) parent.set(find(x), find(ids[0]));
+  }
+  const groups = new Map<string, string[]>();
+  for (const id of greedy) groups.set(find(id), [...(groups.get(find(id)) ?? []), id]);
+
+  const order = [...greedy];
+  for (const members of groups.values()) {
+    if (members.length < 3 || members.length > maxSearch) continue;
+    const mine = new Set(members);
+    const relevant = rules.filter(([bundle]) => mine.has(bundle[0]));
+    if (!relevant.length) continue;
+    const score = (seq: string[]) => {
+      const pos = new Map(seq.map((id, i) => [id, i]));
+      let ok = 0;
+      for (const [bundle, together] of relevant) {
+        const sorted = [...bundle].sort((x, y) => pos.get(x)! - pos.get(y)!);
+        const idx = sorted.flatMap((id, i) => (together.has(id) ? [i] : []));
+        if (idx[idx.length - 1] - idx[0] === idx.length - 1) ok++;
+      }
+      return ok;
+    };
+    // A seeded random walk over block moves that never gets worse, so it can cross plateaus that
+    // single strict improvements cannot; the same data always gives the same order.
+    let seed = 0x9e3779b9 ^ members.length;
+    const rnd = () => { seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t ^= t + Math.imul(t ^ (t >>> 7), 61 | t); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    let seq = [...members], now = score(seq), best = seq, top = now;
+    for (let step = 0; step < 400 * members.length && top < relevant.length; step++) {
+      const len = 1 + Math.floor(rnd() * Math.min(3, seq.length - 1));
+      const from = Math.floor(rnd() * (seq.length - len + 1));
+      const rest = [...seq.slice(0, from), ...seq.slice(from + len)];
+      const to = Math.floor(rnd() * (rest.length + 1));
+      const next = [...rest.slice(0, to), ...seq.slice(from, from + len), ...rest.slice(to)];
+      const sc = score(next);
+      if (sc < now) continue;
+      seq = next; now = sc;
+      if (sc > top) { best = next; top = sc; }
+    }
+    seq = best;
+    // Put the improved order back into the slots these lines held.
+    const slotsHeld = members.map((id) => order.indexOf(id)).sort((x, y) => x - y);
+    slotsHeld.forEach((slot, k) => { order[slot] = seq[k]; });
+  }
+  return new Map(order.map((id, i) => [id, i]));
 }
 
 /** Offsets across a bundle of these lines, centred, in `order`, `gap` apart. */
