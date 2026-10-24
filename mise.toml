@@ -24,6 +24,21 @@ description = "Typecheck without building"
 depends = ["install"]
 run = "npm run typecheck"
 
+[tasks.test]
+description = "Run the unit tests (vitest)"
+depends = ["install"]
+run = "npm test"
+
+[tasks.check-data]
+description = "Validate the map data under public/data/"
+depends = ["install"]
+run = "npm run check-data"
+
+[tasks.fetch]
+description = "Build map data: mise run fetch -- stuttgart, or -- --help"
+depends = ["install"]
+run = "npm run fetch --"
+
 [tasks.build]
 description = "Typecheck and build into dist/, as CI does"
 depends = ["install"]
