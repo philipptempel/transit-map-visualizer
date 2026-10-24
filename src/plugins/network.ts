@@ -1,5 +1,6 @@
 import { cutAt, getJson, offset, resample, toYear, type Plugin, type Point } from "../renderer";
 import type { DateLike, GroupDef, LonLat, NetworkFile, Stop } from "../schema";
+import { orient } from "./orient";
 
 declare module "../renderer" {
   interface Services {
@@ -12,7 +13,7 @@ interface Strand { id?: string; color: string; start?: DateLike; end?: DateLike 
 interface ProjectedStop extends Stop { g: Point; s: Point }
 interface Seg {
   from: string; to: string; start?: DateLike; end?: DateLike;
-  /** Flipped into canonical order, so it grows from `to` back towards `from`. */
+  /** Drawn from `to` to `from` to keep parallel lines on their side, so it grows back from the far end. */
   flipped: boolean;
   group: GroupDef; lines: Strand[]; ga: Point[]; sa: Point[];
 }
@@ -26,6 +27,7 @@ export function network({ url, samples = 24, lineWidth = 3, lineGap = 3.5, label
   let data: NetworkFile = { groups: [], lines: [], stops: [], segments: [] };
   let segs: Seg[] = [];
   let stops = new Map<string, ProjectedStop>();
+  let flips: boolean[] = [];
 
   return {
     id: "network",
@@ -36,6 +38,8 @@ export function network({ url, samples = 24, lineWidth = 3, lineGap = 3.5, label
       if (!json) throw new Error(`Missing ${url}`);
       data = json;
       data.groups.forEach((gd) => ctx.addGroup(gd));
+      const groupOf = new Map(data.groups.flatMap((gd) => gd.modes.map((m) => [m, gd.id] as const)));
+      flips = orient(data.segments, (seg) => groupOf.get(seg.mode));
       [...data.segments, ...data.stops].forEach((x) => ctx.extendRange(x.start, x.end));
       // A group's data starts at its coverage, so a map of today's network alone opens on today.
       data.groups.forEach((gd) => ctx.extendRange(gd.coverage?.from));
@@ -51,14 +55,13 @@ export function network({ url, samples = 24, lineWidth = 3, lineGap = 3.5, label
       const lineById = new Map(data.lines.map((l) => [l.id, l] as const));
       stops = new Map(data.stops.map((s) => [s.id, { ...s, g: P(s.geo), s: P(s.schem ?? s.geo) }] as const));
 
-      segs = data.segments.flatMap((raw): Seg[] => {
+      segs = data.segments.flatMap((raw, i): Seg[] => {
         const group = groupOf.get(raw.mode), a = stops.get(raw.from), b = stops.get(raw.to);
         if (!group || !a || !b) return [];
         let { from, to } = raw;
         let geo: LonLat[] = raw.geo ?? [a.geo, b.geo];
         let sch: LonLat[] = raw.schem ?? [a.schem ?? a.geo, b.schem ?? b.geo];
-        // Canonical direction, so parallel lines keep the same side through every segment.
-        const flipped = from > to;
+        const flipped = flips[i];
         if (flipped) {
           [from, to] = [to, from];
           geo = [...geo].reverse();
