@@ -9,7 +9,7 @@ import { anchorStops, snapEnds } from "../graph/anchor";
 import { metres } from "../graph/geo";
 import { buildSegments, stopAxes, type RouteForGraph } from "../graph/segments";
 import { PRECISION, roundPoint, tidy } from "../graph/simplify";
-import { dedupeStops } from "../graph/stops";
+import { dedupeStops, type Served } from "../graph/stops";
 import { compareIds, OsmIndex, routes, stopCandidates, type RouteRecord, type Tags } from "../sources/osm";
 
 const ROUTES = ["tram", "light_rail", "subway", "monorail", "train", "bus", "trolleybus", "ferry", "funicular", "aerialway"];
@@ -131,7 +131,18 @@ export function buildNetwork(osm: OsmIndex, cfg: MapConfig, year: number, budget
     stops: r.stops.filter((s) => candGeo.has(s)).map((s) => ({ id: s, geo: candGeo.get(s)! })),
     path: r.path,
   })));
-  const { stops: graphStops, stopOf } = dedupeStops(cands, 300, axes);
+  // ...and which lines stop there, so one line's two platforms count as one stop.
+  const groupOfMode = new Map((cfg.groups ?? DEFAULT_GROUPS).flatMap((g) => g.modes.map((m) => [m, g.id] as const)));
+  const served = new Map<string, Served>();
+  for (const { r, mode } of kept) {
+    for (const st of r.stops) {
+      const e = served.get(st) ?? { lines: new Set<string>(), groups: new Set<string>() };
+      e.lines.add(lineOf.get(r.id)!);
+      e.groups.add(groupOfMode.get(mode) ?? mode);
+      served.set(st, e);
+    }
+  }
+  const { stops: graphStops, stopOf } = dedupeStops(cands, 300, axes, served);
   const twins = [...new Set(graphStops.filter((a) => graphStops.some((b) =>
     a !== b && a.name && a.name === b.name && metres(a.geo, b.geo) <= 300)).map((st) => st.name))].sort();
   if (twins.length) report.push(`stops split where their tracks cross: ${twins.length}, e.g. ${twins.slice(0, 6).join("; ")}`);

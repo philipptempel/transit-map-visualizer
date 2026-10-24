@@ -61,3 +61,30 @@ describe("dedupeStops with track directions", () => {
     expect(d.stops.map((s) => s.id)).toEqual(["n2", "r9"]);
   });
 });
+
+describe("dedupeStops with the lines that stop there", () => {
+  const at = (id: string, x: number, y = 0) => ({ id, name: "Stop", geo: [x, y] as [number, number] });
+  const served = (lines: string[], group: string) => ({ lines: new Set(lines), groups: new Set([group]) });
+
+  it("merges one line's two platforms even where its track curves between them", () => {
+    // Bubenbad: U15 each way, 100 m apart, tracks 60° apart on the curve.
+    const d = dedupeStops([at("n1", 0), at("n2", 0.0009)], 300,
+      new Map([["n1", [0]], ["n2", [60]]]), new Map([["n1", served(["U15"], "rail")], ["n2", served(["U15"], "rail")]]));
+    expect(d.stops).toHaveLength(1);
+  });
+
+  it("keeps crossing platforms of one group apart, even when a bus line stops at both", () => {
+    // Charlottenplatz: U5 runs north–south, U2 east–west, 80 m apart; bus 44 stops beside both.
+    const d = dedupeStops([at("n1", 0), at("n2", 0.00072), at("n3", 0, 0.0001), at("n4", 0.00072, 0.0001)], 300,
+      new Map([["n1", [90]], ["n2", [0]], ["n3", [90]], ["n4", [0]]]),
+      new Map([["n1", served(["U5"], "rail")], ["n2", served(["U2"], "rail")], ["n3", served(["44"], "bus")], ["n4", served(["44"], "bus")]]));
+    expect(d.stops.map((s) => s.members.sort())).toEqual([["n1", "n3"], ["n2", "n4"]]);
+  });
+
+  it("lets a bus stop round the corner join the station when a line links them", () => {
+    const d = dedupeStops([at("n1", 0), at("n2", 0.0009), at("n3", 0.0005)], 300,
+      new Map([["n1", [0]], ["n2", [90]], ["n3", [0]]]),
+      new Map([["n1", served(["S1"], "rail")], ["n2", served(["42"], "bus")], ["n3", { lines: new Set(["S1", "42"]), groups: new Set(["rail", "bus"]) }]]));
+    expect(d.stops).toHaveLength(1);
+  });
+});

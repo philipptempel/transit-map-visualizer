@@ -31,17 +31,34 @@ function meanAxis(a: number[]): number {
 }
 const axisGap = (a: number, b: number) => { const d = Math.abs(a - b) % 180; return Math.min(d, 180 - d); };
 
+/** What serves a candidate: the lines that stop there and the groups (tram, bus, ...) they belong to. */
+export interface Served { lines: Set<string>; groups: Set<string> }
+
+const meets = <T>(a: Set<T> | undefined, b: Set<T> | undefined) => !!a && !!b && [...a].some((x) => b.has(x));
+
 /**
  * `axes` gives the direction of the track at each candidate (see stopAxes); candidates without one
  * join whichever stop they are nearest to, but never join two that run different ways.
+ *
+ * Two platforms whose tracks cross more than 30 m apart stay apart, unless a line stops at both
+ * (its two directions on staggered platforms, or on a curve). Where a line links two clusters,
+ * only platforms of the same group keep them apart: the bus stop beside a station does not, but
+ * two Stadtbahn platforms on crossing streets, with no line in common, still do.
  */
-export function dedupeStops(cands: StopCandidate[], radius = 300, axes = new Map<string, number[]>()): Deduped {
+export function dedupeStops(cands: StopCandidate[], radius = 300, axes = new Map<string, number[]>(), served = new Map<string, Served>()): Deduped {
   const parent = cands.map((_, i) => i);
   const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
   const axis = cands.map((c) => (axes.get(c.id)?.length ? meanAxis(axes.get(c.id)!) : null));
+  const by = cands.map((c) => served.get(c.id));
   const members = cands.map((_, i) => [i]);   // per cluster root
-  const fits = (ra: number, rb: number) => members[ra].every((i) => axis[i] == null || members[rb].every((j) =>
-    axis[j] == null || axisGap(axis[i]!, axis[j]!) <= SAME_AXIS || metres(cands[i].geo, cands[j].geo) <= SAME_SPOT));
+  const shareLine = (i: number, j: number) => meets(by[i]?.lines, by[j]?.lines);
+  const fits = (ra: number, rb: number) => {
+    const linked = members[ra].some((i) => members[rb].some((j) => shareLine(i, j)));
+    return members[ra].every((i) => members[rb].every((j) =>
+      axis[i] == null || axis[j] == null ||
+      axisGap(axis[i]!, axis[j]!) <= SAME_AXIS || metres(cands[i].geo, cands[j].geo) <= SAME_SPOT ||
+      shareLine(i, j) || (linked && !meets(by[i]?.groups, by[j]?.groups))));
+  };
 
   // Pairs that might be one stop: same stop area, or same name within `radius`. Closest first.
   const pairs: [d: number, a: number, b: number][] = [];
