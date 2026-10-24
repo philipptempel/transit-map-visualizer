@@ -1,18 +1,19 @@
 // One map page per city, at map/<id>.html, rendered from map.html.
 
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Plugin } from "vite";
 import { isAvailable } from "../src/catalog.ts";
 import type { CityEntry } from "../src/schema.ts";
 
-const CATALOG = "public/data/cities.json";
+const CATALOG = "data/cities.json";   // inside Vite's public directory
 const CITY_PATH = /^\/map\/([^/?#]+)\.html(?:[?#]|$)/;
 
 const escape = (s: string) =>
   s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
-function cities(): CityEntry[] {
-  return (JSON.parse(readFileSync(CATALOG, "utf8")) as CityEntry[]).filter(isAvailable);
+function cities(publicDir: string): CityEntry[] {
+  return (JSON.parse(readFileSync(join(publicDir, CATALOG), "utf8")) as CityEntry[]).filter(isAvailable);
 }
 
 /**
@@ -33,9 +34,14 @@ function cityPage(html: string, city: CityEntry): string {
 }
 
 export function cityPages(): Plugin {
+  // Absolute, from Vite's resolved config, so builds started outside the project root work too.
+  let publicDir = "";
   return {
     name: "city-pages",
     enforce: "post",
+    configResolved(config) {
+      publicDir = config.publicDir;
+    },
     // Dev server: serve map.html for /map/<id>.html.
     configureServer(server) {
       server.middlewares.use((req, _res, next) => {
@@ -48,7 +54,7 @@ export function cityPages(): Plugin {
       handler(html, { originalUrl, server }) {
         if (!server || !originalUrl) return html;
         const id = originalUrl.match(CITY_PATH)?.[1];
-        const city = id && cities().find((c) => c.id === decodeURIComponent(id));
+        const city = id && cities(publicDir).find((c) => c.id === decodeURIComponent(id));
         return city ? cityPage(html, city) : html;
       },
     },
@@ -56,7 +62,7 @@ export function cityPages(): Plugin {
     generateBundle(_options, bundle) {
       const shell = bundle["map.html"];
       if (shell?.type !== "asset") return;
-      for (const city of cities()) {
+      for (const city of cities(publicDir)) {
         this.emitFile({ type: "asset", fileName: `map/${city.id}.html`, source: cityPage(String(shell.source), city) });
       }
       delete bundle["map.html"];
