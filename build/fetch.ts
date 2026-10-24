@@ -133,8 +133,10 @@ async function buildOne(cfg: MapConfig, cmd: Extract<Command, { cmd: "build" }>,
   const catalog = await readCatalog(catalogFile);
   const entry = entryFor(cfg, catalog.find((e) => e.id === cfg.id), { available: hasData, changed, today });
   const problems = hasData ? await checkMap(DATA_ROOT, entry, cfg) : [];
-  if (problems.length) lines.push(...problems.map((p) => `check: ${p}`));
-  else lines.push(hasData ? "check: ok" : "check: no data yet");
+  const shown = 20;
+  lines.push(...problems.slice(0, shown).map((p) => `check: ${p}`));
+  if (problems.length > shown) lines.push(`check: ... and ${problems.length - shown} more (npm run check-data -- ${cfg.id} lists all)`);
+  if (!problems.length) lines.push(hasData ? "check: ok" : "check: no data yet");
 
   if (!cmd.dryRun) {
     const next = upsert(catalog, cfg, {

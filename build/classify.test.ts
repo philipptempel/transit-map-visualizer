@@ -46,3 +46,10 @@ describe("classify", () => {
     expect(included("international_rail", { ...cfg, profile: "continental-rail" })).toBe(true);
   });
 });
+
+it("can require an OSM route type in an override", () => {
+  const notBus: MapConfig = { ...cfg, overrides: [{ match: { ref: /^10$/, route: /^(?!(?:bus|trolleybus)$)/ }, mode: "rack_railway" }] };
+  expect(classify({ ref: "10", osm: { route: "train", ref: "10" } }, notBus)).toBe("rack_railway");
+  expect(classify({ ref: "10", osm: { route: "bus", ref: "10" } }, notBus)).toBe("bus");
+  expect(classify({ ref: "10", osm: { route: "trolleybus", ref: "10" } }, notBus)).toBe("trolleybus");
+});

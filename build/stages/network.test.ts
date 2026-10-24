@@ -55,6 +55,54 @@ describe("buildNetwork", () => {
   });
 });
 
+describe("buildNetwork on whole-line maps", () => {
+  it("drops routes that run beyond the margin around the bbox, and names them", () => {
+    // The margin reaches to x = 0.2: the S1 to the northern Markt stays, routes on to Dom (x = 0.212) go.
+    const { file, report } = buildNetwork(demostadt(), { ...cfg, clip: "whole-line", bbox: [0, 0.1, 0.1, 0.15] }, 2026);
+    expect(file.lines.map((l) => l.id)).toEqual(["r4"]);
+    expect(report[0]).toBe("routes: 1 kept; skipped 3 running off the map");
+    expect(report.slice(1, 5)).toEqual([
+      "off the map (beyond -0.10, 0.05, 0.20, 0.20), e.g.:",
+      '  r1 "Tram 1: Westpark => Dom" (route=tram, network=Demo)',
+      '  r2 "Tram 1: Dom => Westpark" (route=tram, network=Demo)',
+      '  r3 "Bus X3: Markt => Dom" (route=bus, network=Demo)',
+    ]);
+  });
+});
+
+describe("buildNetwork reports", () => {
+  it("names what each override caught", () => {
+    const { report } = buildNetwork(demostadt(), { ...cfg, overrides: [{ match: { ref: /^X3$/ }, mode: "bus" }, { match: { ref: /^9$/ }, mode: "tram" }] }, 2026);
+    expect(report).toContain("override ref=/^X3$/ → bus: 1 route");
+    expect(report).toContain('  r3 "Bus X3: Markt => Dom" (route=bus, network=Demo)');
+    expect(report).toContain("override ref=/^9$/ → tram: 0 routes");
+  });
+
+  it("skips long-distance coaches", () => {
+    const osm = demostadt();
+    osm.relations.get(3)!.tags!.service = "long_distance";
+    const { report } = buildNetwork(osm, cfg, 2026);
+    expect(report[0]).toBe("routes: 3 kept; skipped 1 long-distance coach");
+  });
+
+  it("simplifies bus geometry harder, then drops it, to fit the budget; rail keeps its track", () => {
+    const { file, report } = buildNetwork(demostadt(), cfg, 2026, 1000);   // too small even with straight buses
+    expect(report.filter((r) => r.startsWith("over the"))).toEqual([
+      "over the 0.0 MB budget: bus/trolleybus/express_bus geometry simplified to 15 m",
+      "over the 0.0 MB budget: bus/trolleybus/express_bus geometry simplified to 30 m",
+      "over the 0.0 MB budget: bus/trolleybus/express_bus geometry simplified to 60 m",
+      "over the 0.0 MB budget: bus/trolleybus/express_bus geometry simplified to 120 m",
+      "over the 0.0 MB budget: bus/trolleybus/express_bus geometry left straight",
+    ]);
+    expect(file.segments.find((s) => s.mode === "express_bus")!.geo).toBeUndefined();
+    expect(file.segments.find((s) => s.mode === "tram")!.geo).toHaveLength(3);
+  });
+
+  it("leaves a file under budget alone", () => {
+    expect(buildNetwork(demostadt(), cfg, 2026).report.some((r) => r.startsWith("over the"))).toBe(false);
+  });
+});
+
 it("normalises OSM colours", () => {
   expect(colour("#F00")).toBe("#ff0000");
   expect(colour("#7F77DD")).toBe("#7f77dd");

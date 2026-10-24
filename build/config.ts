@@ -46,7 +46,8 @@ export const SCOPE_TYPE: Record<Scope, MapType> = {
   city: "local", region: "regional", country: "national", continent: "continental", world: "global",
 };
 
-export interface Match { ref?: RegExp; name?: RegExp; network?: RegExp; operator?: RegExp }
+/** Every given field must match. `route` is the OSM route tag (tram, bus, train, ...). */
+export interface Match { ref?: RegExp; name?: RegExp; network?: RegExp; operator?: RegExp; route?: RegExp }
 
 /** An airline or shipping company drawn as one line; `from`/`to` bound the years it operated. */
 export interface Operator { name: string; color: string; from?: string; to?: string }

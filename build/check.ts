@@ -46,6 +46,12 @@ export function grow([w, s, e, n]: BBox, frac: number): BBox {
   return [w - dx, s - dy, e + dx, n + dy];
 }
 
+/**
+ * Where a map's coordinates may lie: the bbox plus a margin, wider for whole-line maps, whose
+ * lines may run out of the bbox. The network stage drops routes that leave it.
+ */
+export const mapBounds = (bbox: BBox, clip?: MapConfig["clip"]) => grow(bbox, clip === "whole-line" ? 1 : 0.5);
+
 const inside = ([lon, lat]: LonLat, [w, s, e, n]: BBox) => lon >= w && lon <= e && lat >= s && lat <= n;
 const isLonLat = (p: unknown): p is LonLat =>
   Array.isArray(p) && p.length === 2 && p.every((v) => typeof v === "number" && Number.isFinite(v));
@@ -132,7 +138,7 @@ const exists = (file: string) => stat(file).then(() => true, () => false);
 export async function checkMap(root: string, e: MapEntry, cfg?: MapConfig): Promise<string[]> {
   const out = checkEntry(e);
   const dir = join(root, e.id);
-  const bounds = e.type === "global" || out.length ? undefined : grow(e.bbox, cfg?.clip === "whole-line" ? 1 : 0.5);
+  const bounds = e.type === "global" || out.length ? undefined : mapBounds(e.bbox, cfg?.clip);
 
   const file = join(dir, "network.json");
   let net: NetworkFile | null;
