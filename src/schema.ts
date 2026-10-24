@@ -22,8 +22,8 @@ export interface GroupDef extends ToggleGroup {
 
 export type MapType = "local" | "regional" | "national";
 
-/** One entry in data/cities.json, the catalog shown on the landing page. */
-export interface CityEntry {
+/** One entry in data/maps.json, the catalog shown on the landing page. */
+export interface MapEntry {
   id: string; name: string; bbox: BBox;
   type: MapType;
   continent?: string;              // e.g. "Europe"; absent for fictional maps

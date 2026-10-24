@@ -2,7 +2,7 @@ import { geoMercator, type GeoProjection } from "d3-geo";
 import { select } from "d3-selection";
 import { zoom, zoomIdentity, type D3ZoomEvent, type ZoomTransform } from "d3-zoom";
 import type { MultiPoint } from "geojson";
-import type { CityEntry, DateLike, LonLat, ToggleGroup } from "./schema";
+import type { DateLike, LonLat, MapEntry, ToggleGroup } from "./schema";
 
 export type Point = [x: number, y: number];
 export interface Life { grow: number; alpha: number }
@@ -23,7 +23,7 @@ export interface RenderState {
 
 export interface Ctx {
   readonly g: CanvasRenderingContext2D;
-  readonly city: CityEntry;
+  readonly map: MapEntry;
   readonly state: RenderState;
   readonly projection: GeoProjection;
   project(ll: LonLat): Point;
@@ -50,7 +50,7 @@ export interface Plugin {
 export interface Snapshot { year: number; morph: number; playing: boolean; speed: number; range: [number, number]; badges: string[] }
 
 export interface RendererOptions {
-  canvas: HTMLCanvasElement; city: CityEntry; plugins: Plugin[];
+  canvas: HTMLCanvasElement; map: MapEntry; plugins: Plugin[];
   yearsPerSecond?: number; rampYears?: number;
 }
 
@@ -125,7 +125,7 @@ export function offset(pts: Point[], d: number): Point[] {
 }
 
 export function createRenderer({
-  canvas, city, plugins, yearsPerSecond = 4, rampYears = 0.75,
+  canvas, map, plugins, yearsPerSecond = 4, rampYears = 0.75,
 }: RendererOptions): Renderer {
   const g = canvas.getContext("2d") ?? fail("Canvas 2D context unavailable");
   const projection = geoMercator();
@@ -144,7 +144,7 @@ export function createRenderer({
   let run = 0;   // bumped on every play(), so a loop from an earlier play() stops
 
   const ctx: Ctx = {
-    g, city, state, projection,
+    g, map, state, projection,
     project: (ll) => projection(ll) ?? [NaN, NaN],
     lerp: (a, b, m = state.morph) => [a[0] + (b[0] - a[0]) * m, a[1] + (b[1] - a[1]) * m],
     life(start, end) {
@@ -193,7 +193,7 @@ export function createRenderer({
     state.height = r.height;
     canvas.width = Math.round(r.width * state.dpr);
     canvas.height = Math.round(r.height * state.dpr);
-    const [w, s, e, n] = city.bbox;
+    const [w, s, e, n] = map.bbox;
     const extent: MultiPoint = { type: "MultiPoint", coordinates: [[w, s], [e, n]] };
     projection.fitExtent([[24, 24], [r.width - 24, r.height - 24]], extent);
     for (const p of live()) {

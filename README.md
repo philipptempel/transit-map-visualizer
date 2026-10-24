@@ -112,7 +112,7 @@ settings it needs.
 
 ```text
 index.html             landing page shell
-map.html               map page shell, built into map/<id>.html per city
+map.html               map page shell, built into map/<id>.html per map
 components.json        shadcn/ui settings
 src/
   pages/               entry points that mount each page
@@ -121,23 +121,23 @@ src/
     MapCatalog.tsx     the map grid with its sort and filter menus
     MapPage.tsx        map controls wired to the renderer
     ui/                shadcn/ui components (Vega preset, Radix)
-  hooks/useCatalog.ts  loads data/cities.json
+  hooks/useCatalog.ts  loads data/maps.json
   catalog.ts           filtering and sorting of the map catalog
   renderer.ts          canvas, projection, zoom, timeline, plugin host
   schema.ts            data types shared by the renderer and the build step
   styles/globals.css   Tailwind and the shadcn/ui theme
   plugins/             basemap, network, landmarks
 build/
-  pages.ts             Vite plugin that renders the per-city map pages
-  config.ts            cities, inclusion profiles and default mode groups
+  pages.ts             Vite plugin that renders the per-map pages
+  config.ts            maps, inclusion profiles and default mode groups
   classify.ts          maps OSM route tags or GTFS route types to modes
-public/data/           per-city data served as static JSON
+public/data/           per-map data served as static JSON
 ```
 
 ## Data
 
-Each city lives in `public/data/<city-id>/` and is listed in
-`public/data/cities.json`, the catalog behind the landing page:
+Each map lives in `public/data/<map-id>/` and is listed in
+`public/data/maps.json`, the catalog behind the landing page:
 
 | Field       | Meaning                                                           |
 | ----------- | ----------------------------------------------------------------- |
@@ -166,19 +166,19 @@ geographic filters are unset.
 Dates can be `"YYYY"`, `"YYYY-MM"`, `"YYYY-MM-DD"` or a decimal year. A missing
 date means open-ended. The full types are in [`src/schema.ts`](src/schema.ts).
 
-## Adding a city
+## Adding a map
 
-1. Add an entry to `CITIES` in [`build/config.ts`](build/config.ts): bounding
+1. Add an entry to `MAPS` in [`build/config.ts`](build/config.ts): bounding
    box, an inclusion profile (`local`, `local-plus-regional` or
    `national-rail`) and any overrides for routes the source data
    misclassifies. The match rules there are starting guesses and need
    checking against the real feeds.
-2. Produce `network.json` and friends for it under `public/data/<city-id>/`,
+2. Produce `network.json` and friends for it under `public/data/<map-id>/`,
    using `classify()` from [`build/classify.ts`](build/classify.ts) to assign
    modes.
-3. Add the city to `public/data/cities.json` with its type, location and
+3. Add the map to `public/data/maps.json` with its type, location and
    dates (see the table above). Unless it is `planned`, the build then gives
-   it a page at `map/<city-id>.html`.
+   it a page at `map/<map-id>.html`.
 
 ## Deployment
 

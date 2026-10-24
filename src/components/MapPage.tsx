@@ -14,7 +14,7 @@ import { basemap } from "@/plugins/basemap";
 import { landmarks } from "@/plugins/landmarks";
 import { network } from "@/plugins/network";
 import { createRenderer, type Renderer, type Snapshot } from "@/renderer";
-import type { CityEntry, ToggleGroup as Group } from "@/schema";
+import type { MapEntry, ToggleGroup as Group } from "@/schema";
 
 const SPEEDS = [0.25, 0.5, 1, 2, 4, 8];
 
@@ -39,14 +39,14 @@ const keepFocus = { onMouseDown: (e: MouseEvent) => e.preventDefault() };
 export function MapPage() {
   const entries = useCatalog();
   if (!entries) return null;
-  const cities = entries.filter(isAvailable);
+  const maps = entries.filter(isAvailable);
   const wanted = decodeURIComponent(location.pathname.match(/\/map\/([^/]+)\.html$/)?.[1] ?? "");
-  const city = cities.find((c) => c.id === wanted) ?? cities[0];
-  if (!city) return <p className="p-6 text-muted-foreground">No maps with data yet.</p>;
-  return <MapView city={city} cities={cities} />;
+  const map = maps.find((c) => c.id === wanted) ?? maps[0];
+  if (!map) return <p className="p-6 text-muted-foreground">No maps with data yet.</p>;
+  return <MapView map={map} maps={maps} />;
 }
 
-function MapView({ city, cities }: { city: CityEntry; cities: CityEntry[] }) {
+function MapView({ map, maps }: { map: MapEntry; maps: MapEntry[] }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const renderer = useRef<Renderer | null>(null);
   const [groups, setGroups] = useState<(Group & { on: boolean })[]>([]);
@@ -54,22 +54,22 @@ function MapView({ city, cities }: { city: CityEntry; cities: CityEntry[] }) {
   const [layout, setLayout] = useState("geo");
 
   // The renderer draws on its own; React only mirrors its state in the controls.
-  // It lives as long as the page, since picking another city reloads the page.
+  // It lives as long as the page, since picking another map reloads the page.
   useEffect(() => {
     if (renderer.current || !canvas.current) return;
     const r = createRenderer({
       canvas: canvas.current,
-      city,
+      map,
       plugins: [
-        basemap({ url: `data/${city.id}/basemap/index.json` }),
-        network({ url: `data/${city.id}/network.json` }),
-        landmarks({ url: `data/${city.id}/landmarks.json` }),
+        basemap({ url: `data/${map.id}/basemap/index.json` }),
+        network({ url: `data/${map.id}/network.json` }),
+        landmarks({ url: `data/${map.id}/landmarks.json` }),
       ],
     });
     renderer.current = r;
     r.onChange(setSnap);
     r.ready.then(() => setGroups(r.groups())).catch((err) => console.error(err));
-  }, [city]);
+  }, [map]);
 
   const r = renderer.current;
   const year = Math.floor(snap?.year ?? 0);
@@ -121,11 +121,11 @@ function MapView({ city, cities }: { city: CityEntry; cities: CityEntry[] }) {
         <Button variant="outline" size="sm" asChild>
           <a href="./"><ArrowLeft data-icon="inline-start" /> All maps</a>
         </Button>
-        <Select value={city.id} onValueChange={(id) => { location.href = `map/${encodeURIComponent(id)}.html`; }}>
+        <Select value={map.id} onValueChange={(id) => { location.href = `map/${encodeURIComponent(id)}.html`; }}>
           <SelectTrigger size="sm" aria-label="Map"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectGroup>
-              {cities.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              {maps.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
             </SelectGroup>
           </SelectContent>
         </Select>

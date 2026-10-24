@@ -31,20 +31,20 @@ export const DEFAULT_GROUPS: GroupDef[] = [
 
 export interface Match { ref?: RegExp; name?: RegExp; network?: RegExp; operator?: RegExp }
 
-export interface CityConfig {
+export interface MapConfig {
   id: string; name: string;
   country: string;                              // ISO 3166-1 alpha-2, used for "international"
   bbox: [number, number, number, number];       // W, S, E, N
   clip: "bbox" | "whole-line";                  // cut at bbox, or keep any line touching it
   profile: keyof typeof PROFILES;
-  include?: Partial<Include>;                   // per-city tweaks on top of the profile
+  include?: Partial<Include>;                   // per-map tweaks on top of the profile
   sBahnLike?: Match[];                          // heavy-rail routes that count as S-Bahn
   overrides?: { match: Match; mode: Mode }[];   // force a mode, checked first
   groups?: GroupDef[];
 }
 
 // Match rules are starting guesses; verify against what the feeds actually say.
-export const CITIES: CityConfig[] = [
+export const MAPS: MapConfig[] = [
   {
     id: "nantes", name: "Nantes", country: "FR", bbox: [-1.80, 47.10, -1.35, 47.35],
     clip: "bbox", profile: "local",

@@ -8,7 +8,7 @@ import { Field, FieldLabel } from "@/components/ui/field";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { distinct, isAvailable, MAP_TYPE_LABELS, matches, sortEntries, type Filters, type SortDir, type SortKey } from "@/catalog";
 import { cn } from "@/lib/utils";
-import type { CityEntry, MapType } from "@/schema";
+import type { MapEntry, MapType } from "@/schema";
 
 type Option = [value: string, label: string];
 
@@ -56,7 +56,7 @@ function FilterSelect({ id, label, allLabel, hint = allLabel, value, options, on
   );
 }
 
-function MapCard({ entry: c }: { entry: CityEntry }) {
+function MapCard({ entry: c }: { entry: MapEntry }) {
   const ready = isAvailable(c);
   const where = c.fictional
     ? "Fictional demo city"
@@ -91,7 +91,7 @@ function MapCard({ entry: c }: { entry: CityEntry }) {
   );
 }
 
-export function MapCatalog({ entries }: { entries: CityEntry[] }) {
+export function MapCatalog({ entries }: { entries: MapEntry[] }) {
   const [sort, setSort] = useState("name:asc");
   const [f, setF] = useState<Filters>({});
   const reset = () => { setF({}); setSort("name:asc"); };

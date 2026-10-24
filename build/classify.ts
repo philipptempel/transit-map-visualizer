@@ -1,4 +1,4 @@
-import { PROFILES, type CityConfig, type Match, type Mode } from "./config";
+import { PROFILES, type MapConfig, type Match, type Mode } from "./config";
 
 export interface RouteInfo {
   ref?: string; name?: string; network?: string; operator?: string;
@@ -47,15 +47,15 @@ function fromGtfs(t: number): Mode | null {
 
 const HEAVY: Mode[] = ["suburban_rail", "regional_rail", "domestic_rail"];
 
-export function classify(r: RouteInfo, city: CityConfig): Mode | null {
-  const forced = city.overrides?.find((o) => test(o.match, r));
+export function classify(r: RouteInfo, map: MapConfig): Mode | null {
+  const forced = map.overrides?.find((o) => test(o.match, r));
   if (forced) return forced.mode;
   const mode = r.osm ? fromOsm(r.osm) : r.gtfsType != null ? fromGtfs(r.gtfsType) : null;
   if (!mode || !HEAVY.includes(mode)) return mode;
-  if (city.sBahnLike?.some((m) => test(m, r))) return "s_bahn";
-  if (r.countries?.some((c) => c !== city.country)) return "international_rail";
+  if (map.sBahnLike?.some((m) => test(m, r))) return "s_bahn";
+  if (r.countries?.some((c) => c !== map.country)) return "international_rail";
   return mode;
 }
 
-export const included = (mode: Mode, city: CityConfig) =>
-  ({ ...PROFILES[city.profile], ...city.include })[mode] ?? false;
+export const included = (mode: Mode, map: MapConfig) =>
+  ({ ...PROFILES[map.profile], ...map.include })[mode] ?? false;
