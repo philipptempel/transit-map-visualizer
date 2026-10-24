@@ -3,7 +3,7 @@
 
 import type { BBox, GroupDef, Line, LonLat, Mode, NetworkFile, Segment, Stop } from "../../src/schema";
 import { BUDGET, mapBounds } from "../check";
-import { classify, included, isCoach } from "../classify";
+import { classify, included, isCoach, isHeritage, test } from "../classify";
 import { DEFAULT_GROUPS, SCOPE_TYPE, type MapConfig } from "../config";
 import { buildSegments, type RouteForGraph } from "../graph/segments";
 import { PRECISION, roundPoint, tidy } from "../graph/simplify";
@@ -69,6 +69,8 @@ export function buildNetwork(osm: OsmIndex, cfg: MapConfig, year: number, budget
   const offMap: RouteRecord[] = [];
   const all = routes(osm);
   for (const r of all) {
+    if (isHeritage(r.tags)) { tally(skipped, "heritage or tourist"); continue; }
+    if (cfg.exclude?.some((m) => test(m, r.info))) { tally(skipped, "excluded by the map config"); continue; }
     const mode = classify(r.info, cfg);
     if (!mode) { tally(skipped, isCoach(r.tags) ? "long-distance coach" : `route=${r.tags.route} unclassified`); continue; }
     if (!included(mode, cfg)) { tally(skipped, `${mode} not in profile`); continue; }
@@ -109,7 +111,7 @@ export function buildNetwork(osm: OsmIndex, cfg: MapConfig, year: number, budget
     if (first.r.info.ref) line.ref = first.r.info.ref;
     const name = tags.name ?? (members.length === 1 ? first.r.tags.name : undefined);
     if (name) line.name = name;
-    const c = colour(tags.colour ?? members.map((m) => m.r.tags.colour).find(Boolean));
+    const c = cfg.lineColors?.[mode] ?? colour(tags.colour ?? members.map((m) => m.r.tags.colour).find(Boolean));
     if (c) line.color = c;
     lines.push(line);
     for (const m of members) lineOf.set(m.r.id, id);

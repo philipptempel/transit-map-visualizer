@@ -66,6 +66,8 @@ export interface MapConfig {
   include?: Partial<Include>;                   // per-map tweaks on top of the profile
   sBahnLike?: Match[];                          // heavy-rail routes that count as S-Bahn
   overrides?: { match: Match; mode: Mode }[];   // force a mode, checked first
+  exclude?: Match[];                            // routes to leave out that no tag marks
+  lineColors?: Partial<Record<Mode, string>>;   // colour every line of a mode, whatever OSM says
   groups?: GroupDef[];
   operators?: Operator[];                       // air and sea: the operator and its predecessors
   projection?: Projection;

@@ -98,6 +98,19 @@ describe("buildNetwork reports", () => {
     expect(file.segments.find((s) => s.mode === "tram")!.geo).toHaveLength(3);
   });
 
+  it("leaves out heritage services, and what the map config excludes", () => {
+    const osm = demostadt();
+    osm.relations.get(4)!.tags!.heritage = "2";
+    const { file, report } = buildNetwork(osm, { ...cfg, exclude: [{ ref: /^X3$/ }] }, 2026);
+    expect(file.lines.map((l) => l.id)).toEqual(["r10"]);
+    expect(report[0]).toBe("routes: 2 kept; skipped 1 excluded by the map config, 1 heritage or tourist");
+  });
+
+  it("colours every line of a mode when the config says so", () => {
+    const { file } = buildNetwork(demostadt(), { ...cfg, lineColors: { express_bus: "#e2001a", s_bahn: "#123456" } }, 2026);
+    expect(file.lines.map((l) => [l.id, l.color])).toEqual([["r3", "#e2001a"], ["r4", "#123456"], ["r10", "#7f77dd"]]);
+  });
+
   it("leaves a file under budget alone", () => {
     expect(buildNetwork(demostadt(), cfg, 2026).report.some((r) => r.startsWith("over the"))).toBe(false);
   });

@@ -239,8 +239,11 @@ larger, and the **landmarks** stage, report "not implemented yet".
    lookup. `--dry-run` prints the config instead of writing it.
 2. Check the config: bbox, catalog fields (continent, country, state), the
    inclusion profile (`local`, `local-plus-regional`, `national-rail`,
-   `continental-rail`, `air`, `sea`) and, once data is in, overrides for routes
-   the source data misclassifies.
+   `continental-rail`, `air`, `sea`) and, once data is in, `overrides` for
+   routes the source data misclassifies, `exclude` for routes to leave out, and
+   `lineColors` to give every line of a mode one colour. Heritage and tourist
+   services (museum trams, steam trains) are left out of every map anyway,
+   where OSM tags them as such.
 3. Build it with `npm run fetch -- <id>`. A map whose data passes the checks
    becomes `available` in `maps.json`, and the build gives it a page at
    `map/<id>.html`.

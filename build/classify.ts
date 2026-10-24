@@ -7,13 +7,17 @@ export interface RouteInfo {
   countries?: string[];           // countries the route's stops lie in
 }
 
-const test = (m: Match, r: RouteInfo) =>
+export const test = (m: Match, r: RouteInfo) =>
   (["ref", "name", "network", "operator"] as const).every((k) => !m[k] || m[k]!.test(r[k] ?? "")) &&
   (!m.route || m.route.test(r.osm?.route ?? ""));
 
 /** Long-distance coaches are tagged route=bus too; no map profile wants them as local buses. */
 export const isCoach = (t: Record<string, string>) =>
   t.route === "bus" && (t.service === "long_distance" || t.service === "coach" || t.bus === "coach");
+
+/** Heritage and tourist services: museum trams, steam trains, sightseeing boats. No map keeps them. */
+export const isHeritage = (t: Record<string, string>) =>
+  (!!t.heritage && t.heritage !== "no") || ["tourism", "tourist", "heritage"].includes(t.service ?? "") || t.usage === "tourism";
 
 function fromOsm(t: Record<string, string>): Mode | null {
   if (isCoach(t)) return null;

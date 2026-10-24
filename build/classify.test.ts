@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { demostadt } from "./__fixtures__/load";
-import { classify, included } from "./classify";
+import { classify, included, isHeritage } from "./classify";
 import type { MapConfig } from "./config";
 import { routes } from "./sources/osm";
 
@@ -52,4 +52,11 @@ it("can require an OSM route type in an override", () => {
   expect(classify({ ref: "10", osm: { route: "train", ref: "10" } }, notBus)).toBe("rack_railway");
   expect(classify({ ref: "10", osm: { route: "bus", ref: "10" } }, notBus)).toBe("bus");
   expect(classify({ ref: "10", osm: { route: "trolleybus", ref: "10" } }, notBus)).toBe("trolleybus");
+});
+
+it("recognises heritage and tourist services", () => {
+  expect(isHeritage({ route: "tram", heritage: "yes" })).toBe(true);
+  expect(isHeritage({ route: "train", service: "tourism" })).toBe(true);
+  expect(isHeritage({ route: "tram", heritage: "no" })).toBe(false);
+  expect(isHeritage({ route: "tram", service: "urban" })).toBe(false);
 });
