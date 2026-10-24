@@ -28,10 +28,55 @@ export interface NetworkOptions {
 const mix = (a: Point[], b: Point[], m: number): Point[] =>
   a.map((p, i): Point => [p[0] + (b[i][0] - p[0]) * m, p[1] + (b[i][1] - p[1]) * m]);
 
+export interface TrackPoints {
+  dot: Map<string, LonLat>;    // stop → where to draw it
+  end: Map<string, LonLat>;    // "group stop" → where that group's segments end at the stop
+}
+
+/**
+ * Each route's track starts where that route stops, so at a big station the segments' ends lie on
+ * different platforms, and the stop itself (often the station building) may be off the track.
+ * Within each group, a stop's segments all end at the most central of their track ends; the stop
+ * is drawn at that point of its most prominent group (groups that fade in schematic view, the
+ * buses, count least), so a bus stop round the corner does not pull a station off its tracks.
+ */
+export function trackPoints({ groups, segments }: NetworkFile): TrackPoints {
+  const rank = new Map<string, number>();
+  const sorted = [...groups].sort((a, b) => Number(!a.schematic) - Number(!b.schematic));
+  sorted.forEach((g, i) => g.modes.forEach((m) => { if (!rank.has(m)) rank.set(m, i); }));
+  const groupOf = new Map(sorted.flatMap((g) => g.modes.map((m) => [m, g.id] as const)));
+
+  const ends = new Map<string, LonLat[]>();
+  const best = new Map<string, [rank: number, key: string]>();   // stop → its most prominent group's key
+  for (const s of segments) {
+    const g = groupOf.get(s.mode);
+    if (!g || !s.geo || s.geo.length < 2) continue;
+    for (const [stop, p] of [[s.from, s.geo[0]], [s.to, s.geo[s.geo.length - 1]]] as const) {
+      const key = `${g} ${stop}`;
+      ends.set(key, [...(ends.get(key) ?? []), p]);
+      const r = rank.get(s.mode)!;
+      if (!best.has(stop) || r < best.get(stop)![0]) best.set(stop, [r, key]);
+    }
+  }
+  const end = new Map<string, LonLat>();
+  for (const [key, pts] of ends) {
+    let pick = pts[0], least = Infinity;
+    for (const p of pts) {
+      const sum = pts.reduce((t, q) => t + Math.hypot(p[0] - q[0], p[1] - q[1]), 0);
+      if (sum < least) { least = sum; pick = p; }
+    }
+    end.set(key, pick);
+  }
+  const dot = new Map([...best].map(([stop, [, key]]) => [stop, end.get(key)!] as const));
+  return { dot, end };
+}
+
 export function network({ url, samples = 24, lineWidth = 3, lineGap = 3.5, labelZoom = 2.5, bundleWidth = 10 }: NetworkOptions): Plugin {
   let data: NetworkFile = { groups: [], lines: [], stops: [], segments: [] };
   let segs: Seg[] = [];
   let stops = new Map<string, ProjectedStop>();
+  let atStop = new Map<string, Seg[]>();   // group + stop → segments ending there
+  let onTrack: TrackPoints = { dot: new Map(), end: new Map() };   // where stops and segment ends go
   let chain: Orientation = { flip: [], prev: [], next: [] };
   let order = new Map<string, number>();
   let widest = new Map<string, number>();   // group id → most lines on one of its segments
@@ -46,8 +91,13 @@ export function network({ url, samples = 24, lineWidth = 3, lineGap = 3.5, label
       data = json;
       data.groups.forEach((gd) => ctx.addGroup(gd));
       const groupOf = new Map(data.groups.flatMap((gd) => gd.modes.map((m) => [m, gd.id] as const)));
-      chain = orient(data.segments, (seg) => groupOf.get(seg.mode));
-      order = lineOrder(data.lines);
+      onTrack = trackPoints(data);
+      order = lineOrder(data.lines, data.segments);
+      const stopGeo = new Map(data.stops.map((st) => [st.id, st.geo] as const));
+      chain = orient(data.segments, (seg) => groupOf.get(seg.mode), {
+        order,
+        geo: (i) => data.segments[i].geo ?? [stopGeo.get(data.segments[i].from)!, stopGeo.get(data.segments[i].to)!],
+      });
       widest = new Map();
       for (const seg of data.segments) {
         const id = groupOf.get(seg.mode);
@@ -66,13 +116,15 @@ export function network({ url, samples = 24, lineWidth = 3, lineGap = 3.5, label
       const P = ctx.project;
       const groupOf = new Map(data.groups.flatMap((gd) => gd.modes.map((m) => [m, gd] as const)));
       const lineById = new Map(data.lines.map((l) => [l.id, l] as const));
-      stops = new Map(data.stops.map((s) => [s.id, { ...s, g: P(s.geo), s: P(s.schem ?? s.geo) }] as const));
+      stops = new Map(data.stops.map((s) => [s.id, { ...s, g: P(onTrack.dot.get(s.id) ?? s.geo), s: P(s.schem ?? s.geo) }] as const));
 
       segs = data.segments.flatMap((raw, i): Seg[] => {
         const group = groupOf.get(raw.mode), a = stops.get(raw.from), b = stops.get(raw.to);
         if (!group || !a || !b) return [];
         let { from, to } = raw;
-        let geo: LonLat[] = raw.geo ?? [a.geo, b.geo];
+        // Every segment meets the others where its stop is drawn (see trackPoints).
+        const ga = onTrack.end.get(`${group.id} ${raw.from}`) ?? a.geo, gb = onTrack.end.get(`${group.id} ${raw.to}`) ?? b.geo;
+        let geo: LonLat[] = raw.geo ? [ga, ...raw.geo.slice(1, -1), gb] : [ga, gb];
         let sch: LonLat[] = raw.schem ?? [a.schem ?? a.geo, b.schem ?? b.geo];
         const flipped = chain.flip[i];
         if (flipped) {
@@ -90,6 +142,13 @@ export function network({ url, samples = 24, lineWidth = 3, lineGap = 3.5, label
           sa: resample(sch.map(P), samples),
         }];
       });
+      atStop = new Map();
+      for (const sg of segs) {
+        for (const st of [sg.from, sg.to]) {
+          const k = `${sg.group.id} ${st}`;
+          atStop.set(k, [...(atStop.get(k) ?? []), sg]);
+        }
+      }
     },
 
     draw(ctx) {
@@ -115,13 +174,35 @@ export function network({ url, samples = 24, lineWidth = 3, lineGap = 3.5, label
       const fan = new Map(data.groups.map((gd) => [gd.id, spread(state.t.k, widest.get(gd.id) ?? 1, lineGap, bundleWidth)] as const));
       const ease = (t: number) => t * t * (3 - 2 * t);
 
+      // The layout at one end of a segment (0 = drawn start, 1 = end): its lines together with
+      // those of the segment it chains into there, so a line running through keeps its place.
+      const chained = (s: Seg, end: 0 | 1) => {
+        const other = shown.get((end ? chain.next[s.i] : chain.prev[s.i]) ?? -1);
+        return slots([...ids(shown.get(s.i)!.strands), ...ids(other?.strands ?? [])], order, gap);
+      };
+      // A branch at a junction chains into nothing; its lines start where they sit in the bundle
+      // they leave, mirrored if that bundle is drawn the other way through the stop.
+      const layout = (s: Seg, end: 0 | 1) => {
+        if ((end ? chain.next[s.i] : chain.prev[s.i]) !== undefined) return chained(s, end);
+        const stop = end ? s.to : s.from;
+        const own = ids(shown.get(s.i)!.strands);
+        let host: Seg | undefined, most = 0;
+        for (const h of atStop.get(`${s.group.id} ${stop}`) ?? []) {
+          const hs = shown.get(h.i);
+          if (h === s || !hs) continue;
+          const n = ids(hs.strands).filter((id) => own.includes(id)).length;
+          if (n > most) { most = n; host = h; }
+        }
+        if (!host || most < own.length) return chained(s, end);
+        const hostEnd = host.to === stop ? 1 : 0;
+        const there = chained(host, hostEnd);
+        const sign = hostEnd !== end ? 1 : -1;   // one arrives and one leaves: same sense
+        return new Map(own.map((id) => [id, sign * there.get(id)!]));
+      };
+
       for (const { s, life, vis, strands } of shown.values()) {
-        // At each end, lay out this segment's lines together with those of the segment it chains
-        // into there, so a line running through the stop keeps its place; in between, ease across.
-        const own = ids(strands);
-        const atEnd = (other: number | undefined) =>
-          slots([...own, ...ids(shown.get(other ?? -1)?.strands ?? [])], order, gap);
-        const d0 = atEnd(chain.prev[s.i]), d1 = atEnd(chain.next[s.i]);
+        // In between the two ends, each line eases from its place at one to its place at the other.
+        const d0 = layout(s, 0), d1 = layout(s, 1);
         const full = mix(s.ga, s.sa, state.morph);
         const last = full.length - 1;
         const f = fan.get(s.group.id) ?? 1;

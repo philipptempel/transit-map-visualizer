@@ -17,7 +17,9 @@ describe("dateValue", () => {
 
 describe("check-data", () => {
   it("passes on the shipped data", async () => {
-    expect(await checkAll()).toEqual([{ id: "demostadt", problems: [] }]);
+    const reports = await checkAll();
+    expect(reports.map((r) => r.id)).toContain("demostadt");
+    expect(reports.filter((r) => r.problems.length)).toEqual([]);
   });
 
   describe("on a deliberately broken copy of Demostadt", () => {
@@ -25,7 +27,9 @@ describe("check-data", () => {
     beforeEach(async () => {
       root = await mkdtemp(join(tmpdir(), "check-data-"));
       await cp(join(DATA_ROOT, "demostadt"), join(root, "data", "demostadt"), { recursive: true });
-      await cp(join(DATA_ROOT, "maps.json"), join(root, "data", "maps.json"));
+      // Demostadt alone, so the other maps' data need not come along.
+      const catalog = JSON.parse(await readFile(join(DATA_ROOT, "maps.json"), "utf8")) as { id: string }[];
+      await writeFile(join(root, "data", "maps.json"), JSON.stringify(catalog.filter((e) => e.id === "demostadt")));
       net = JSON.parse(await readFile(join(DATA_ROOT, "demostadt", "network.json"), "utf8")) as NetworkFile;
     });
     afterEach(() => rm(root, { recursive: true, force: true }));

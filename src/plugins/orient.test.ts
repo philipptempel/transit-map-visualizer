@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Segment } from "../schema";
+import type { LonLat, Segment } from "../schema";
 import { lineOrder, orient, slots, spread } from "./orient";
 
 const seg = (from: string, to: string, lines: string[], mode: Segment["mode"] = "s_bahn"): Segment => ({ from, to, mode, lines });
@@ -98,5 +98,40 @@ describe("spread", () => {
     const ks = Array.from({ length: 100 }, (_, i) => 0.5 + i * 0.1);
     const fs = ks.map((k) => spread(k, 12, 3.5, 10));
     expect(fs.every((f, i) => i === 0 || f >= fs[i - 1])).toBe(true);
+  });
+});
+
+describe("junctions", () => {
+  // Stuttgart Rohr in miniature: S1, S2, S3 and S11 arrive from the north; S2 and S3 leave one way,
+  // S1 and S11 the other.
+  const lines = [
+    { id: "s1", ref: "S1", mode: "s_bahn" as const }, { id: "s2", ref: "S2", mode: "s_bahn" as const },
+    { id: "s3", ref: "S3", mode: "s_bahn" as const }, { id: "s11", ref: "S11", mode: "s_bahn" as const },
+  ];
+  const at: Record<string, LonLat> = { v: [0, 1], r: [0, 0], east: [1, -1], west: [-1, -1] };
+  const network = (s1Goes: "east" | "west") => {
+    const other = s1Goes === "east" ? "west" : "east";
+    return [
+      seg("v", "r", ["s1", "s2", "s3", "s11"]),
+      seg("r", other, ["s2", "s3"]),
+      seg("r", s1Goes, ["s1", "s11"]),
+    ];
+  };
+
+  it("puts lines that share their track side by side", () => {
+    const order = lineOrder(lines, network("west"));
+    expect([...order.keys()]).toEqual(["s1", "s11", "s2", "s3"]);   // not S1, S2, S3, S11
+  });
+
+  it("turns a chain so the lines that branch off sit on the side they leave to", () => {
+    for (const s1Goes of ["east", "west"] as const) {
+      const segs = network(s1Goes);
+      const order = lineOrder(lines, segs);
+      const { flip } = orient(segs, byMode, { order, geo: (i) => [at[segs[i].from], at[segs[i].to]] });
+      // Positive offsets lie to the right of the drawing direction. Drawn southwards, right is west.
+      const southwards = !flip[0];
+      const s1Side = slots(["s1", "s11", "s2", "s3"], order, 1).get("s1")! > 0 === southwards ? "west" : "east";
+      expect(s1Side).toBe(s1Goes);
+    }
   });
 });

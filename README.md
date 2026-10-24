@@ -104,10 +104,15 @@ drawing happens in plugins, which run in order:
 | `network`   | 10    | Line segments, parallel lines side by side, and stations   |
 | `landmarks` | 20    | Points of interest, which follow a station in schematic view |
 
-Lines that share track are drawn side by side, ordered by their `ref` (S1,
-S2, … S11) and chained from segment to segment so each keeps its side. Where a
-line starts or ends at a stop, the others keep their places at the stop and
-ease into their new ones along the next segment instead of jumping. Zoomed
+Lines that share track are drawn side by side and chained from segment to
+segment so each keeps its side. Lines that run together most of the way sit
+next to each other (otherwise they go by `ref`: S1, S2, … S11), and each chain
+is turned so that at its junctions the lines that branch off already sit on
+the side they leave to. Where a line starts or ends at a stop, the others keep
+their places at the stop and ease into their new ones along the next segment;
+at a junction, a branch's lines start where they sat in the bundle. A stop is
+drawn on its track, where its segments meet, rather than at the station
+building OSM may place it at. Zoomed
 out, a group's bundles merge into one stroke (in the lines' shared colour, or
 the group's) and fan out as the map zooms in; the more lines a group's widest
 bundle holds, the further in it splits.
