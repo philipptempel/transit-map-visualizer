@@ -116,14 +116,46 @@ export function resample(pts: Point[], n: number): Point[] {
   return out;
 }
 
+/** How far along the line each point lies, from 0 at the first to 1 at the last. */
+export function along(pts: Point[]): number[] {
+  const acc = [0];
+  for (let i = 1; i < pts.length; i++) acc.push(acc[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  const total = acc[acc.length - 1] || 1;
+  return acc.map((d) => d / total);
+}
+
+/** The first `f` of the line, measured by length. */
 export function cutAt(pts: Point[], f: number): Point[] {
   if (f >= 1) return pts;
-  const x = f * (pts.length - 1), i = Math.floor(x), r = x - i;
-  const out = pts.slice(0, i + 1);
-  if (i + 1 < pts.length) {
-    out.push([pts[i][0] + (pts[i + 1][0] - pts[i][0]) * r, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * r]);
+  if (f <= 0) return pts.slice(0, 1);
+  const t = along(pts);
+  let i = 0;
+  while (i < pts.length - 2 && t[i + 1] < f) i++;
+  const r = (f - t[i]) / (t[i + 1] - t[i] || 1);
+  return [...pts.slice(0, i + 1), [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * r, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * r]];
+}
+
+/** Douglas–Peucker in screen units: drops points closer than `tol` to the line through their neighbours. */
+export function simplify(pts: Point[], tol: number): Point[] {
+  if (pts.length < 3) return pts;
+  const keep = new Uint8Array(pts.length);
+  keep[0] = keep[pts.length - 1] = 1;
+  const stack: [number, number][] = [[0, pts.length - 1]];
+  while (stack.length) {
+    const [a, b] = stack.pop()!;
+    const [ax, ay] = pts[a], dx = pts[b][0] - ax, dy = pts[b][1] - ay, len2 = dx * dx + dy * dy;
+    let far = -1, max = tol;
+    for (let i = a + 1; i < b; i++) {
+      const px = pts[i][0] - ax, py = pts[i][1] - ay;
+      const t = len2 ? Math.max(0, Math.min(1, (px * dx + py * dy) / len2)) : 0;   // to the segment, not the line
+      const d = Math.hypot(px - dx * t, py - dy * t);
+      if (d > max) { max = d; far = i; }
+    }
+    if (far < 0) continue;
+    keep[far] = 1;
+    stack.push([a, far], [far, b]);
   }
-  return out;
+  return pts.filter((_, i) => keep[i]);
 }
 
 /** Shifts a line sideways by `d`, or by `d(i)` at point i, to the left of its direction. */

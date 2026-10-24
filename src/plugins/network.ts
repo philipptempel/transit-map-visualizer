@@ -1,4 +1,4 @@
-import { cutAt, getJson, offset, resample, toYear, type Life, type Plugin, type Point } from "../renderer";
+import { along, cutAt, getJson, offset, resample, simplify, toYear, type Life, type Plugin, type Point } from "../renderer";
 import type { DateLike, GroupDef, LonLat, NetworkFile, Stop } from "../schema";
 import { lineOrder, orient, slots, spread, type Orientation } from "./orient";
 
@@ -16,8 +16,14 @@ interface Seg {
   from: string; to: string; start?: DateLike; end?: DateLike;
   /** Drawn from `to` to `from` to keep parallel lines on their side, so it grows back from the far end. */
   flipped: boolean;
-  group: GroupDef; lines: Strand[]; ga: Point[]; sa: Point[];
+  group: GroupDef; lines: Strand[];
+  gp: Point[]; sp: Point[];        // the whole geometry, projected: geographic and schematic
+  lod: Map<number, Point[]>[];     // [geographic, schematic] simplified per zoom level, built as needed
+  morph: Map<number, [Point[], Point[]]>;   // both resampled to one count per zoom level, for the morph
 }
+
+/** Zoom levels the geometry is simplified for: 2^-1 = 0.5× up to 2^6 = 64×. */
+const LEVELS = [-1, 6] as const;
 
 export interface NetworkOptions {
   url: string; samples?: number; lineWidth?: number; lineGap?: number; labelZoom?: number;
@@ -138,8 +144,8 @@ export function network({ url, samples = 24, lineWidth = 3, lineGap = 3.5, label
         });
         return [{
           i, from, to, start: raw.start, end: raw.end, flipped, group, lines,
-          ga: resample(geo.map(P), samples),
-          sa: resample(sch.map(P), samples),
+          gp: geo.map(P), sp: sch.map(P),
+          lod: [new Map(), new Map()], morph: new Map(),
         }];
       });
       atStop = new Map();
@@ -173,6 +179,22 @@ export function network({ url, samples = 24, lineWidth = 3, lineGap = 3.5, label
       // Zoomed out, a crowded group's bundles merge into one stroke; they fan out as the map zooms in.
       const fan = new Map(data.groups.map((gd) => [gd.id, spread(state.t.k, widest.get(gd.id) ?? 1, lineGap, bundleWidth)] as const));
       const ease = (t: number) => t * t * (3 - 2 * t);
+      // Like a web map: as much detail as the zoom can show, simplified to half a pixel on screen.
+      const level = Math.max(LEVELS[0], Math.min(LEVELS[1], Math.ceil(Math.log2(state.t.k))));
+      const detailed = (s: Seg, which: 0 | 1) => {
+        let pts = s.lod[which].get(level);
+        if (!pts) s.lod[which].set(level, (pts = simplify(which ? s.sp : s.gp, 0.5 / 2 ** level)));
+        return pts;
+      };
+      // The morph pairs points by index, so both layouts are resampled to one count, more when zoomed in.
+      const paired = (s: Seg) => {
+        let pair = s.morph.get(level);
+        if (!pair) {
+          const n = Math.min(samples * 2 ** Math.max(0, level), 512);
+          s.morph.set(level, (pair = [resample(s.gp, n), resample(s.sp, n)]));
+        }
+        return pair;
+      };
 
       // The layout at one end of a segment (0 = drawn start, 1 = end): its lines together with
       // those of the segment it chains into there, so a line running through keeps its place.
@@ -203,12 +225,13 @@ export function network({ url, samples = 24, lineWidth = 3, lineGap = 3.5, label
       for (const { s, life, vis, strands } of shown.values()) {
         // In between the two ends, each line eases from its place at one to its place at the other.
         const d0 = layout(s, 0), d1 = layout(s, 1);
-        const full = mix(s.ga, s.sa, state.morph);
-        const last = full.length - 1;
+        // Mid-morph, both layouts need the same points; otherwise draw the real geometry.
+        const full = state.morph <= 0 ? detailed(s, 0) : state.morph >= 1 ? detailed(s, 1) : mix(...paired(s), state.morph);
+        const t = along(full);
         const f = fan.get(s.group.id) ?? 1;
         const ends = strands.map((l) => [(l.id && d0.get(l.id)) || 0, (l.id && d1.get(l.id)) || 0] as const);
         const stroke = (color: string, a: number, b: number, alpha: number) => {
-          const pts = offset(full, (k) => f * (a + (b - a) * ease(k / last)));
+          const pts = offset(full, (k) => f * (a + (b - a) * ease(t[k])));
           // Grow from the segment's own `from`; cut a flipped one from the far end and turn it back.
           const path = s.flipped ? cutAt(pts.reverse(), life.grow).reverse() : cutAt(pts, life.grow);
           g.globalAlpha = alpha;

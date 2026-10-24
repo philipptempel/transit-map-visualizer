@@ -112,7 +112,10 @@ the side they leave to. Where a line starts or ends at a stop, the others keep
 their places at the stop and ease into their new ones along the next segment;
 at a junction, a branch's lines start where they sat in the bundle. A stop is
 drawn on its track, where its segments meet, rather than at the station
-building OSM may place it at. Zoomed
+building OSM may place it at. Like a web map, lines are drawn with as much detail
+as the zoom can show: each segment's geometry is simplified to half a pixel on
+screen, coarse when zoomed out and fine when zoomed in, down to the detail the
+data was built with. Zoomed
 out, a group's bundles merge into one stroke (in the lines' shared colour, or
 the group's) and fan out as the map zooms in; the more lines a group's widest
 bundle holds, the further in it splits.
