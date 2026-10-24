@@ -1,9 +1,10 @@
 // Keeps public/data/maps.json in step with the map configs. Entries without a config
 // (Demostadt) are left alone; entries with one take their name, bbox and location from it.
 
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import type { MapEntry } from "../../src/schema";
 import { SCOPE_TYPE, type MapConfig } from "../config";
+import { writeIfChanged } from "./write";
 
 export interface CatalogUpdate {
   available: boolean;       // network.json exists and passed the checks
@@ -62,9 +63,5 @@ export function upsert(entries: MapEntry[], cfg: MapConfig, u: CatalogUpdate): M
 }
 
 export async function writeCatalog(file: string, entries: MapEntry[]): Promise<boolean> {
-  const text = formatCatalog(entries);
-  const old = await readFile(file, "utf8").catch(() => "");
-  if (old === text) return false;
-  await writeFile(file, text);
-  return true;
+  return writeIfChanged(file, formatCatalog(entries));
 }

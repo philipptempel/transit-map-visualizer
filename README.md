@@ -142,9 +142,10 @@ build/
   maps/<id>.ts         one config per map
   classify.ts          maps OSM route tags or GTFS route types to modes
   area.ts, scaffold.ts --area lookup and the config template for fetch new
+  stages/              network and basemap stages, run per map by fetch.ts
   sources/             cache, Overpass and Nominatim clients, OSM parsing
-  graph/               stop dedupe, segment building, date merging
-  out/                 writers; so far the catalog
+  graph/               stop dedupe, segment building, simplification, date merging
+  out/                 writers for files and the catalog
   __fixtures__/        made-up source responses for the tests
 public/data/           per-map data served as static JSON, under its own licence
 ```
@@ -209,9 +210,15 @@ with `--offline` rebuilds the same files without touching the network.
 does not stop the others; the exit code is 0 when all went well, 1 when a map
 failed and 2 for bad arguments.
 
-So far the script parses its arguments, loads the configs, validates whatever
-data exists and keeps the catalog in step. The stages that download and build
-the network, base map and landmarks report "not implemented yet".
+The **network** stage queries Overpass for every route relation touching the
+bbox, classifies it, merges stops (a shared stop_area, or the same name within
+300 m), cuts each segment's geometry from the track, simplifies it and writes
+`network.json`. It has no history yet: every group's `coverage.from` is the
+year of the OSM snapshot, so the map opens on today's network and says so.
+The **basemap** stage (cities and regions) takes water, parks and forest,
+major roads and main-line rail from OSM, clips and simplifies them with
+mapshaper, and writes `basemap/current.json`. Base maps for countries and
+larger, and the **landmarks** stage, report "not implemented yet".
 
 ## Adding a map
 

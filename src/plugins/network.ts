@@ -37,6 +37,8 @@ export function network({ url, samples = 24, lineWidth = 3, lineGap = 3.5, label
       data = json;
       data.groups.forEach((gd) => ctx.addGroup(gd));
       [...data.segments, ...data.stops].forEach((x) => ctx.extendRange(x.start, x.end));
+      // A group's data starts at its coverage, so a map of today's network alone opens on today.
+      data.groups.forEach((gd) => ctx.extendRange(gd.coverage?.from));
       ctx.provide("stop", (id) => {
         const s = stops.get(id);
         return s && ctx.lerp(s.g, s.s);

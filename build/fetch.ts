@@ -10,6 +10,7 @@ import { loadConfigs, MAPS_DIR } from "./load";
 import { entryFor, readCatalog, upsert, writeCatalog } from "./out/catalog";
 import { configFor, ID, NETWORKS, renderConfig, SCOPES } from "./scaffold";
 import type { CacheOptions } from "./sources/cache";
+import { RUN, STAGES, type Stage, type StageContext } from "./stages";
 
 export const HELP = `Usage:
   npm run fetch -- <id>... [options]       build configured maps (build/maps/<id>.ts)
@@ -44,9 +45,6 @@ Exit codes: 0 ok, 1 a map failed, 2 bad arguments.
 `;
 
 export class UsageError extends Error {}
-
-export const STAGES = ["network", "basemap", "landmarks"] as const;
-export type Stage = (typeof STAGES)[number];
 
 export type Command =
   | { cmd: "help" }
@@ -112,22 +110,6 @@ export function parseCli(argv: string[]): Command {
 
 // ---- build ----
 
-export interface StageContext { cfg: MapConfig; outDir: string; cache: CacheOptions; dryRun: boolean }
-export interface StageResult {
-  status: "done" | "todo";
-  note?: string;
-  attribution?: string[];   // credits for what this stage used
-  changed?: boolean;        // wrote files that differ from before
-}
-
-const notYet = async (): Promise<StageResult> => ({ status: "todo", note: "not implemented yet" });
-
-export const RUN: Record<Stage, (ctx: StageContext) => Promise<StageResult>> = {
-  network: notYet,
-  basemap: notYet,
-  landmarks: notYet,
-};
-
 interface Outcome { id: string; ok: boolean; lines: string[] }
 
 async function buildOne(cfg: MapConfig, cmd: Extract<Command, { cmd: "build" }>, today: string): Promise<Outcome> {
@@ -138,7 +120,7 @@ async function buildOne(cfg: MapConfig, cmd: Extract<Command, { cmd: "build" }>,
   try {
     for (const stage of cmd.only) {
       const r = await RUN[stage](ctx);
-      lines.push(`${stage}: ${r.status}${r.note ? ` (${r.note})` : ""}`);
+      lines.push(`${stage}: ${r.status}${r.note ? ` (${r.note})` : ""}`, ...(r.details ?? []).map((d) => `  ${d}`));
       r.attribution?.forEach((a) => attribution.add(a));
       changed ||= !!r.changed;
     }

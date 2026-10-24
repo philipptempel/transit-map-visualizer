@@ -12,7 +12,10 @@ export interface OsmWay { type: "way"; id: number; nodes?: number[]; geometry?: 
 export interface OsmMember { type: "node" | "way" | "relation"; ref: number; role: string }
 export interface OsmRelation { type: "relation"; id: number; members: OsmMember[]; tags?: Tags }
 export type OsmElement = OsmNode | OsmWay | OsmRelation;
-export interface OsmResponse { elements: OsmElement[] }
+export interface OsmResponse {
+  elements: OsmElement[];
+  osm3s?: { timestamp_osm_base?: string };   // Overpass: when its copy of OSM was last updated
+}
 
 /** "n123", "w45", "r6": unique across element types. */
 export const osmId = (type: OsmElement["type"], id: number) => `${type[0]}${id}`;
