@@ -12,6 +12,16 @@ const CITY_PATH = /^\/map\/([^/?#]+)\.html(?:[?#]|$)/;
 const escape = (s: string) =>
   s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
+/** The city id in a /map/<id>.html URL, or undefined if there is none or it is malformed. */
+function cityId(url: string | undefined): string | undefined {
+  const raw = url?.match(CITY_PATH)?.[1];
+  try {
+    return raw && decodeURIComponent(raw);
+  } catch {
+    return undefined;
+  }
+}
+
 function cities(publicDir: string): CityEntry[] {
   return (JSON.parse(readFileSync(join(publicDir, CATALOG), "utf8")) as CityEntry[]).filter(isAvailable);
 }
@@ -42,10 +52,18 @@ export function cityPages(): Plugin {
     configResolved(config) {
       publicDir = config.publicDir;
     },
-    // Dev server: serve map.html for /map/<id>.html.
+    // Dev server: serve map.html for /map/<id>.html, and 404 unknown ids as a static host would.
     configureServer(server) {
-      server.middlewares.use((req, _res, next) => {
-        if (req.url && CITY_PATH.test(req.url)) req.url = "/map.html";
+      server.middlewares.use((req, res, next) => {
+        if (!req.url || !CITY_PATH.test(req.url)) return next();
+        const id = cityId(req.url);
+        if (!id || !cities(publicDir).some((c) => c.id === id)) {
+          res.statusCode = 404;
+          res.setHeader("Content-Type", "text/plain; charset=utf-8");
+          res.end("No such map");
+          return;
+        }
+        req.url = "/map.html";
         next();
       });
     },
@@ -53,8 +71,8 @@ export function cityPages(): Plugin {
       order: "post",
       handler(html, { originalUrl, server }) {
         if (!server || !originalUrl) return html;
-        const id = originalUrl.match(CITY_PATH)?.[1];
-        const city = id && cities(publicDir).find((c) => c.id === decodeURIComponent(id));
+        const id = cityId(originalUrl);
+        const city = id && cities(publicDir).find((c) => c.id === id);
         return city ? cityPage(html, city) : html;
       },
     },
