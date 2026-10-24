@@ -1,0 +1,39 @@
+# Builds the site for every merge request and branch; publishes the default branch to GitLab Pages.
+# Mirrors .github/workflows/pages.yml.
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never   # the merge request pipeline already covers this push
+    - if: $CI_COMMIT_BRANCH
+
+stages: [build, deploy]
+
+build:
+  stage: build
+  image: node:24
+  cache:
+    key:
+      files: [package-lock.json]
+    paths: [.npm/]
+  script:
+    - npm ci --cache .npm --prefer-offline
+    - npm run build
+  artifacts:
+    paths: [dist/]
+    expire_in: 1 week
+
+pages:
+  stage: deploy
+  image: busybox:stable
+  needs: [build]
+  # GitLab Pages serves the job's public/ artifact. The repo's own public/ is
+  # Vite's static-files folder and already copied into dist/, so swap it out.
+  script:
+    - rm -rf public
+    - mv dist public
+  artifacts:
+    paths: [public]
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

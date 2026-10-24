@@ -1,0 +1,36 @@
+{
+  "groups": [
+    { "id": "tram", "label": "Tram", "modes": ["tram"], "color": "#7F77DD", "defaultOn": true, "schematic": true },
+    { "id": "light_rail", "label": "Stadtbahn / metro", "modes": ["light_rail"], "color": "#1D9E75", "defaultOn": true, "schematic": true },
+    { "id": "express_bus", "label": "Express bus / BRT", "modes": ["express_bus"], "color": "#D85A30", "defaultOn": true, "schematic": true, "coverage": { "from": "1999" } }
+  ],
+  "lines": [
+    { "id": "d-1", "ref": "1", "mode": "tram", "color": "#7F77DD" },
+    { "id": "d-2", "ref": "U2", "mode": "light_rail", "color": "#1D9E75" },
+    { "id": "d-x", "ref": "X3", "mode": "express_bus", "color": "#D85A30" }
+  ],
+  "stops": [
+    { "id": "wp", "name": "Westpark", "geo": [0.028, 0.128], "schem": [0.040, 0.150] },
+    { "id": "hf", "name": "Hafen",    "geo": [0.095, 0.142], "schem": [0.110, 0.150] },
+    { "id": "wf", "name": "Werft",    "geo": [0.070, 0.204], "schem": [0.110, 0.210] },
+    { "id": "mk", "name": "Markt",    "geo": [0.168, 0.150], "schem": [0.180, 0.150] },
+    { "id": "dm", "name": "Dom",      "geo": [0.212, 0.172], "schem": [0.240, 0.150] },
+    { "id": "nt", "name": "Nordtor",  "geo": [0.262, 0.182], "schem": [0.280, 0.190] },
+    { "id": "un", "name": "Uni",      "geo": [0.140, 0.262], "schem": [0.180, 0.270] },
+    { "id": "kl", "name": "Klinik",   "geo": [0.160, 0.208], "schem": [0.180, 0.210] },
+    { "id": "bf", "name": "Bahnhof",  "geo": [0.180, 0.100], "schem": [0.180, 0.090] },
+    { "id": "ms", "name": "Messe",    "geo": [0.070, 0.042], "schem": [0.120, 0.030] }
+  ],
+  "segments": [
+    { "from": "hf", "to": "mk", "mode": "tram", "lines": ["d-1"], "start": "1965" },
+    { "from": "mk", "to": "dm", "mode": "tram", "lines": ["d-1"], "start": "1965" },
+    { "from": "hf", "to": "wf", "mode": "tram", "lines": ["d-1"], "start": "1965", "end": "1988" },
+    { "from": "wp", "to": "hf", "mode": "tram", "lines": ["d-1"], "start": "1978" },
+    { "from": "dm", "to": "nt", "mode": "tram", "lines": ["d-1"], "start": "1984" },
+    { "from": "mk", "to": "bf", "mode": "light_rail", "lines": ["d-2"], "start": "1972" },
+    { "from": "kl", "to": "mk", "mode": "light_rail", "lines": ["d-2"], "start": "1981" },
+    { "from": "un", "to": "kl", "mode": "light_rail", "lines": ["d-2"], "start": "1996" },
+    { "from": "ms", "to": "bf", "mode": "express_bus", "lines": ["d-x"], "start": "1999" },
+    { "from": "bf", "to": "dm", "mode": "express_bus", "lines": ["d-x"], "start": "1999" }
+  ]
+}
