@@ -1,7 +1,7 @@
 import { geoArea } from "d3-geo";
 import { describe, expect, it } from "vitest";
 import { OsmIndex, type OsmElement } from "../sources/osm";
-import { basemapFeatures, kindOf, shapeBasemap } from "./basemap";
+import { basemapFeatures, coverage, detailFor, kindOf, shapeBasemap } from "./basemap";
 
 // A lake drawn as a multipolygon of two half-rings (counter-clockwise, as OSM often has them)
 // with an island, a park as a closed way, and a road running out of the bbox.
@@ -39,5 +39,29 @@ describe("basemap", () => {
     for (const f of fc.features.slice(0, 2)) expect(geoArea(f)).toBeLessThan(1e-6);
     const small = await shapeBasemap(features, { bbox: [-0.001, -0.001, 0.03, 0.03], interval: 5, minArea: 1e7 });
     expect(small.features.map((f) => f.properties?.kind)).toEqual(["road"]);
+  });
+});
+
+describe("coverage", () => {
+  const bbox = [9, 48.5, 9.5, 49] as [number, number, number, number];
+
+  it("reaches as far as the network does, with a margin, rounded outwards to 0.01°", () => {
+    const net = {
+      groups: [], lines: [],
+      stops: [{ id: "a", name: "A", geo: [8.6, 48.7] as [number, number] }],
+      segments: [{ from: "a", to: "b", mode: "s_bahn" as const, geo: [[8.6, 48.7], [9.2, 49.2]] as [number, number][] }],
+    };
+    expect(coverage(net, bbox)).toEqual([8.57, 48.48, 9.53, 49.22]);
+  });
+
+  it("covers at least the bbox, and only that without a network", () => {
+    expect(coverage(null, bbox, 0)).toEqual(bbox);
+  });
+});
+
+describe("detailFor", () => {
+  it("simplifies a larger area more, so the file stays about the same size", () => {
+    expect(detailFor([0, 0, 1, 1], [0, 0, 1, 1])).toEqual({ interval: 15, minArea: 20000 });
+    expect(detailFor([0, 0, 2, 2], [0, 0, 1, 1])).toEqual({ interval: 30, minArea: 80000 });
   });
 });

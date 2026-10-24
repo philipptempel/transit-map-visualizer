@@ -256,8 +256,10 @@ geometry (15 m for a city) for the overview and the first paint;
 It has no history yet: every group's `coverage.from` is the year of the OSM
 snapshot, so the map opens on today's network and says so.
 The **basemap** stage (cities and regions) takes water, parks and forest,
-major roads and main-line rail from OSM, clips and simplifies them with
-mapshaper, and writes `basemap/current.json`. Base maps for countries and
+major roads and main-line rail from OSM for the area the network actually
+covers (lines on whole-line maps run well past the bbox), plus 2 km, clips and
+simplifies them with mapshaper (coarser for a larger area, so the file keeps
+its size), and writes `basemap/current.json`. Base maps for countries and
 larger, and the **landmarks** stage, report "not implemented yet".
 
 ## Adding a map

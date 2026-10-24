@@ -4,9 +4,34 @@
 import { geoArea } from "d3-geo";
 import type { Feature, FeatureCollection, LineString, MultiPolygon, Polygon, Position } from "geojson";
 import mapshaper from "mapshaper";
-import type { BasemapIndex, BBox, LonLat } from "../../src/schema";
+import type { BasemapIndex, BBox, LonLat, NetworkFile } from "../../src/schema";
 import { joinWays } from "../graph/segments";
 import type { OsmIndex, Tags } from "../sources/osm";
+
+/**
+ * The area the base map has to cover: everything the network draws (lines on whole-line maps run
+ * well past the configured bbox), plus `padKm` around it, and at least the bbox itself. Rounded to
+ * 0.01°, so that small changes to the network do not change the Overpass query.
+ */
+export function coverage(net: NetworkFile | null, bbox: BBox, padKm = 2): BBox {
+  let [w, s, e, n] = bbox;
+  for (const p of [...(net?.stops ?? []).map((st) => st.geo), ...(net?.segments ?? []).flatMap((sg) => sg.geo ?? [])]) {
+    w = Math.min(w, p[0]); s = Math.min(s, p[1]); e = Math.max(e, p[0]); n = Math.max(n, p[1]);
+  }
+  const dy = padKm / 111.32, dx = dy / Math.cos((((s + n) / 2) * Math.PI) / 180);
+  const down = (v: number) => Math.floor(v * 100) / 100, up = (v: number) => Math.ceil(v * 100) / 100;
+  return [down(w - dx), down(s - dy), up(e + dx), up(n + dy)];
+}
+
+/**
+ * Simplification for a base map covering `area` when `bbox` is what it was tuned for (15 m, areas
+ * from 2 ha): coarser in step with the area, so the file stays about the same size.
+ */
+export function detailFor(area: BBox, bbox: BBox): { interval: number; minArea: number } {
+  const size = (b: BBox) => (b[2] - b[0]) * (b[3] - b[1]);
+  const ratio = Math.max(1, size(area) / size(bbox));
+  return { interval: Math.round(15 * Math.sqrt(ratio)), minArea: Math.round(20000 * ratio) };
+}
 
 export function basemapQuery([w, s, e, n]: BBox): string {
   const bb = `(${s},${w},${n},${e})`;
