@@ -14,10 +14,11 @@ be sorted by name or date and filtered by type of network and by continent,
 country and state.
 
 Only a fictional demo city, *Demostadt*, ships with data so far. The
-configuration and route classification for real cities (Nantes, Stuttgart,
-Den Haag, Rotterdam, and French national rail) are in place, but the step
-that fetches their data is not written yet. The landing page lists them as
-"data not available yet".
+configuration and route classification for real maps (Nantes, Stuttgart,
+Den Haag, Rotterdam, and French national rail) are in place, and so is the
+skeleton of the fetch script that will build their data (see
+[Fetching data](#fetching-data)); its download stages are not written yet.
+The landing page lists those maps as "data not available yet".
 
 ## Getting started
 
@@ -37,6 +38,8 @@ mise run dev       # dev server with hot reload
 mise run build     # typecheck and build into dist/, as CI does
 mise run preview   # build, then serve the production build
 mise run typecheck # typecheck only
+mise run test      # unit tests
+mise run check-data # validate the data under public/data/
 mise tasks         # list all tasks
 ```
 
@@ -54,6 +57,9 @@ npm run dev        # dev server with hot reload
 npm run build      # typecheck and build into dist/
 npm run preview    # serve the production build
 npm run typecheck  # typecheck only
+npm test           # unit tests (vitest)
+npm run check-data # validate the data under public/data/
+npm run fetch -- --help   # build map data; see "Fetching data"
 ```
 
 Open the URL Vite prints to get the landing page. Each map has its own page
@@ -80,7 +86,8 @@ On the map page:
 - **Checkboxes** in the header toggle mode groups and landmarks.
 - **Scroll and drag** to zoom and pan. Station names appear once you zoom in.
 - **Notes** in the bottom-left corner of the map say which base map is shown
-  and where a group's data does not reach back to the year on screen.
+  and where a group's data does not reach back to the year on screen. The
+  bottom-right corner credits the map's data sources.
 
 ## How it is built
 
@@ -129,9 +136,17 @@ src/
   plugins/             basemap, network, landmarks
 build/
   pages.ts             Vite plugin that renders the per-map pages
-  config.ts            maps, inclusion profiles and default mode groups
+  fetch.ts             the fetch script: builds map data, scaffolds new maps
+  check.ts             validator behind npm run check-data
+  config.ts            MapConfig type, inclusion profiles and default mode groups
+  maps/<id>.ts         one config per map
   classify.ts          maps OSM route tags or GTFS route types to modes
-public/data/           per-map data served as static JSON
+  area.ts, scaffold.ts --area lookup and the config template for fetch new
+  sources/             cache, Overpass and Nominatim clients, OSM parsing
+  graph/               stop dedupe, segment building, date merging
+  out/                 writers; so far the catalog
+  __fixtures__/        made-up source responses for the tests
+public/data/           per-map data served as static JSON, under its own licence
 ```
 
 ## Data
@@ -142,21 +157,27 @@ Each map lives in `public/data/<map-id>/` and is listed in
 | Field       | Meaning                                                           |
 | ----------- | ----------------------------------------------------------------- |
 | `id`, `name`, `bbox` | Identifier, display name, and `[west, south, east, north]` |
-| `type`      | `local`, `regional` or `national`                                 |
+| `type`      | `local`, `regional`, `national`, `continental` or `global`        |
+| `network`   | `transit`, `rail`, `air` or `sea`                                 |
 | `continent` | Continent name, such as `Europe`                                  |
 | `country`   | ISO 3166-1 alpha-2 code; the page shows the English name          |
 | `state`     | First-level region (state, province, région), if any              |
 | `created`, `updated` | `YYYY-MM-DD` the map was added and its data last changed |
 | `status`    | `planned` for maps with no data yet: listed, but not openable     |
 | `fictional` | `true` for demo data; shown as "Fictional demo city"              |
+| `attribution` | Credits for the data sources, shown on the map page             |
+| `projection` | `mercator` (default) or `equalEarth`, for world maps             |
 
 Location fields can be left out; such a map then only shows up while the
 geographic filters are unset.
 
 - **`network.json`**: mode groups, lines, stops and segments. A segment joins
   two stops and can carry its own geometry for both layouts (`geo`, `schem`)
-  as well as `start` and `end` dates. Lines on a segment can have their own
-  dates too, so a route can be withdrawn while the track stays.
+  as well as `start` and `end` dates. It grows from `from` towards `to`, so
+  for an extension put the stop that was there first in `from`. Lines on a
+  segment can have their own dates too, so a route can be withdrawn while the
+  track stays. Stops, segments and lines on a segment can say where their
+  dates came from in `src`.
 - **`landmarks.json`**: named points with optional dates and an optional
   `anchor` stop.
 - **`basemap/index.json`**: a present-day base map and dated historical
@@ -166,19 +187,81 @@ geographic filters are unset.
 Dates can be `"YYYY"`, `"YYYY-MM"`, `"YYYY-MM-DD"` or a decimal year. A missing
 date means open-ended. The full types are in [`src/schema.ts`](src/schema.ts).
 
+## Fetching data
+
+`npm run fetch` builds everything a map needs under `public/data/<id>/` from its
+config in `build/maps/<id>.ts`, validates it, and updates its entry in
+`maps.json`. Data is fetched locally, reviewed and committed; CI never fetches.
+
+```sh
+npm run fetch -- stuttgart                  # build one map
+npm run fetch -- stuttgart nantes           # or several
+npm run fetch -- --all
+npm run fetch -- stuttgart --only network   # network | basemap | landmarks
+npm run fetch -- stuttgart --offline        # answer from the cache only
+npm run fetch -- stuttgart --refresh        # ignore the cache
+npm run fetch -- stuttgart --dry-run        # report, write nothing
+```
+
+Every download is cached in `.cache/fetch/` (ignored by git), so a second run
+with `--offline` rebuilds the same files without touching the network.
+`OVERPASS_URL` points the script at another Overpass instance. One failed map
+does not stop the others; the exit code is 0 when all went well, 1 when a map
+failed and 2 for bad arguments.
+
+So far the script parses its arguments, loads the configs, validates whatever
+data exists and keeps the catalog in step. The stages that download and build
+the network, base map and landmarks report "not implemented yet".
+
 ## Adding a map
 
-1. Add an entry to `MAPS` in [`build/config.ts`](build/config.ts): bounding
-   box, an inclusion profile (`local`, `local-plus-regional` or
-   `national-rail`) and any overrides for routes the source data
-   misclassifies. The match rules there are starting guesses and need
-   checking against the real feeds.
-2. Produce `network.json` and friends for it under `public/data/<map-id>/`,
-   using `classify()` from [`build/classify.ts`](build/classify.ts) to assign
-   modes.
-3. Add the map to `public/data/maps.json` with its type, location and
-   dates (see the table above). Unless it is `planned`, the build then gives
-   it a page at `map/<map-id>.html`.
+1. Scaffold its config. The scope is `city`, `region`, `country`, `continent`
+   or `world`; the network is `transit`, `rail`, `air` or `sea`:
+
+   ```sh
+   npm run fetch -- new karlsruhe --scope city    --network transit --area "Karlsruhe, DE"
+   npm run fetch -- new de-rail   --scope country --network rail    --area DE
+   npm run fetch -- new eu-rail   --scope continent --network rail  --area EU
+   npm run fetch -- new klm       --scope world   --network air     --operator KLM
+   ```
+
+   `--area` takes a bbox (`w,s,e,n`), an ISO 3166 code (`DE`, `DE-BW`), a
+   continent code (`AF AN AS EU NA OC SA`, with `--scope continent`) or a
+   place name. **`EU` is Europe the continent, not the European Union.** The
+   resolved bbox is written into the config, so later builds never repeat the
+   lookup. `--dry-run` prints the config instead of writing it.
+2. Check the config: bbox, catalog fields (continent, country, state), the
+   inclusion profile (`local`, `local-plus-regional`, `national-rail`,
+   `continental-rail`, `air`, `sea`) and, once data is in, overrides for routes
+   the source data misclassifies.
+3. Build it with `npm run fetch -- <id>`. A map whose data passes the checks
+   becomes `available` in `maps.json`, and the build gives it a page at
+   `map/<id>.html`.
+
+`npm run check-data` validates every map with data: that stop and line ids
+resolve, dates parse and no segment ends before it starts, coordinates lie
+near the map's bbox, every segment's mode belongs to a group (otherwise it is
+silently not drawn), and `network.json` stays within budget (1.5 MB for a
+local or regional map, 5 MB for anything larger). CI runs it before every
+build.
+
+## Data sources
+
+| Source | Used for | Licence |
+| ------ | -------- | ------- |
+| [OpenStreetMap] via Overpass | today's routes, stops, city base maps | ODbL |
+| [OpenHistoricalMap] | closed and historical lines | ODbL |
+| [Wikidata] | opening and closing dates of stations and lines | CC0 |
+| [Natural Earth] | base maps for countries, continents, the world | public domain |
+| [OurAirports] | airports | public domain |
+| [OpenFlights] | a 2014 snapshot of airline routes | ODbL |
+| `overrides/` (none yet) | hand-curated dates and routes, each with its source URL | facts; the map's licence |
+
+Not all of these are wired up yet. Data derived from ODbL sources is itself
+under the ODbL, separate from the GPL on the code; see
+[`public/data/LICENSE.md`](public/data/LICENSE.md). Each map credits its
+sources on its page. Dates are never invented to fill gaps: where the sources
+stop, a group's `coverage.from` says so and the map shows a note.
 
 ## Deployment
 
@@ -202,6 +285,12 @@ Software Foundation, either version 3 of the License, or (at your option)
 any later version. See [`LICENSE.md`](LICENSE.md) for the full text.
 
 [mise]: https://mise.jdx.dev
+[OpenStreetMap]: https://www.openstreetmap.org/copyright
+[OpenHistoricalMap]: https://www.openhistoricalmap.org
+[Wikidata]: https://www.wikidata.org
+[Natural Earth]: https://www.naturalearthdata.com
+[OurAirports]: https://ourairports.com/data/
+[OpenFlights]: https://openflights.org/data
 [React]: https://react.dev
 [shadcn/ui]: https://ui.shadcn.com
 [Tailwind CSS]: https://tailwindcss.com
