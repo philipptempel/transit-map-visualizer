@@ -18,6 +18,9 @@ export const BUDGET: Record<MapType, number> = {
   local: 1.5 * MB, regional: 1.5 * MB, national: 5 * MB, continental: 5 * MB, global: 5 * MB,
 };
 
+/** network.detail.json, loaded after the first paint, may be larger. */
+export const DETAIL_BUDGET = Object.fromEntries(Object.entries(BUDGET).map(([k, v]) => [k, 4 * v])) as Record<MapType, number>;
+
 const TYPES: MapType[] = ["local", "regional", "national", "continental", "global"];
 const NETWORKS = ["transit", "rail", "air", "sea"];
 const DAYS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -103,6 +106,24 @@ export function checkNetwork(net: NetworkFile, opts: CheckOptions = {}): string[
   return out;
 }
 
+/** Problems with network.detail.json: one entry per segment, each null or a track from stop to stop. */
+export function checkDetail(detail: { segments?: unknown }, net: NetworkFile, opts: CheckOptions = {}): string[] {
+  const out: string[] = [];
+  const list = detail.segments;
+  if (!Array.isArray(list)) return ["segments is not a list"];
+  if (list.length !== net.segments.length) return [`${list.length} entries for ${net.segments.length} segments`];
+  const at = new Map(net.stops.map((s) => [s.id, s.geo] as const));
+  const same = (p: LonLat, q?: LonLat) => !!q && p[0] === q[0] && p[1] === q[1];
+  list.forEach((g, i) => {
+    if (g === null) return;
+    const seg = net.segments[i], name = `segment ${i} (${seg.from} → ${seg.to})`;
+    if (!Array.isArray(g) || g.length < 2 || !g.every(isLonLat)) { out.push(`${name}: not a list of [lon, lat] pairs`); return; }
+    if (!same(g[0], at.get(seg.from)) || !same(g[g.length - 1], at.get(seg.to))) out.push(`${name}: does not run from stop to stop`);
+    if (opts.bounds) g.forEach((p, k) => { if (!inside(p, opts.bounds!)) out.push(`${name}, point ${k}: lies outside the map's bbox`); });
+  });
+  return out;
+}
+
 export function checkLandmarks(items: Landmark[], stops: Set<string>, opts: CheckOptions = {}): string[] {
   const out: string[] = [];
   for (const it of items) {
@@ -153,6 +174,13 @@ export async function checkMap(root: string, e: MapEntry, cfg?: MapConfig): Prom
   out.push(...checkNetwork(net, { bounds }));
 
   try {
+    const detailFile = join(dir, "network.detail.json");
+    const detail = await readJson<{ segments?: unknown }>(detailFile);
+    if (detail) {
+      const dsize = (await stat(detailFile)).size;
+      if (dsize > DETAIL_BUDGET[e.type]) out.push(`network.detail.json is ${(dsize / MB).toFixed(2)} MB, over the ${DETAIL_BUDGET[e.type] / MB} MB budget for a ${e.type} map`);
+      out.push(...checkDetail(detail, net, { bounds }).map((p) => `network.detail.json: ${p}`));
+    }
     const marks = await readJson<Landmark[]>(join(dir, "landmarks.json"));
     if (marks) out.push(...checkLandmarks(marks, new Set(net.stops.map((s) => s.id)), { bounds }).map((p) => `landmarks.json: ${p}`));
     const index = await readJson<BasemapIndex>(join(dir, "basemap", "index.json"));

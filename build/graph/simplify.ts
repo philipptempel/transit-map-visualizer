@@ -4,13 +4,17 @@ import type { LonLat } from "../../src/schema";
 import type { Scope } from "../config";
 import { projectOnto } from "./geo";
 
-/** How far geometry may move, and how many decimals coordinates keep, per scope. */
-export const PRECISION: Record<Scope, { tolerance: number; decimals: number }> = {
-  city: { tolerance: 5, decimals: 5 },
-  region: { tolerance: 5, decimals: 5 },
-  country: { tolerance: 200, decimals: 3 },
-  continent: { tolerance: 1000, decimals: 3 },
-  world: { tolerance: 1000, decimals: 3 },
+/**
+ * How far geometry may move, in metres, and how many decimals coordinates keep, per scope.
+ * `coarse` is what network.json carries, for the overview and the first paint; the detail file
+ * adds `fine` geometry, finest for rail (`major`) and a little coarser for buses (`minor`).
+ */
+export const PRECISION: Record<Scope, { coarse: number; fine: { major: number; minor: number }; decimals: number }> = {
+  city: { coarse: 15, fine: { major: 1, minor: 5 }, decimals: 5 },
+  region: { coarse: 15, fine: { major: 1, minor: 5 }, decimals: 5 },
+  country: { coarse: 500, fine: { major: 100, minor: 200 }, decimals: 4 },
+  continent: { coarse: 2000, fine: { major: 500, minor: 1000 }, decimals: 3 },
+  world: { coarse: 2000, fine: { major: 500, minor: 1000 }, decimals: 3 },
 };
 
 /** Drops points that lie within `tolerance` metres of the line through their neighbours. Ends always stay. */

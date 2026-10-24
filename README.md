@@ -87,7 +87,10 @@ On the map page:
 - **Checkboxes** in the header toggle mode groups and landmarks.
 - **Scroll and drag** to zoom and pan, or use the zoom control in the top-right
   corner: its slider shows how far in you are, between 0.5× and 50×, and the
-  number below resets the view. Station names appear once you zoom in.
+  number below resets the view. Zoomed out, only stops where something
+  happens are shown: where a line ends, where lines merge, split or cross,
+  and where two of the groups on show meet. The others fade in from 2×.
+  Station names appear once you zoom in, the minor ones from 6×.
 - **Notes** in the bottom-left corner of the map say which base map is shown
   and where a group's data does not reach back to the year on screen. The
   bottom-right corner credits the map's data sources.
@@ -198,6 +201,9 @@ geographic filters are unset.
   segment can have their own dates too, so a route can be withdrawn while the
   track stays. Stops, segments and lines on a segment can say where their
   dates came from in `src`.
+- **`network.detail.json`** (optional): finer geometry, one entry per segment
+  in `network.json`'s order, `null` where there is nothing finer. The map
+  draws with `network.json` first and swaps this in once it has loaded.
 - **`landmarks.json`**: named points with optional dates and an optional
   `anchor` stop.
 - **`basemap/index.json`**: a present-day base map and dated historical
@@ -232,8 +238,12 @@ failed and 2 for bad arguments.
 The **network** stage queries Overpass for every route relation touching the
 bbox, classifies it, merges stops (a shared stop_area, or the same name within
 300 m), cuts each segment's geometry from the track, simplifies it and writes
-`network.json`. It has no history yet: every group's `coverage.from` is the
-year of the OSM snapshot, so the map opens on today's network and says so.
+`network.json`. Each stop gets one point on its track, where all its
+segments end (rail decides over buses). `network.json` carries coarse
+geometry (15 m for a city) for the overview and the first paint;
+`network.detail.json` adds the fine geometry (1 m for rail, 5 m for buses).
+It has no history yet: every group's `coverage.from` is the year of the OSM
+snapshot, so the map opens on today's network and says so.
 The **basemap** stage (cities and regions) takes water, parks and forest,
 major roads and main-line rail from OSM, clips and simplifies them with
 mapshaper, and writes `basemap/current.json`. Base maps for countries and
@@ -271,8 +281,9 @@ larger, and the **landmarks** stage, report "not implemented yet".
 resolve, dates parse and no segment ends before it starts, coordinates lie
 near the map's bbox, every segment's mode belongs to a group (otherwise it is
 silently not drawn), and `network.json` stays within budget (1.5 MB for a
-local or regional map, 5 MB for anything larger). CI runs it before every
-build.
+local or regional map, 5 MB for anything larger). The detail file must have
+one entry per segment, each running from stop to stop, within four times that
+budget. CI runs it before every build.
 
 ## Data sources
 

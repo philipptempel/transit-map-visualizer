@@ -5,6 +5,8 @@ import type { BBox, GroupDef, Line, LonLat, Mode, NetworkFile, Segment, Stop } f
 import { BUDGET, mapBounds } from "../check";
 import { classify, included, isCoach, isHeritage, test } from "../classify";
 import { DEFAULT_GROUPS, SCOPE_TYPE, type MapConfig } from "../config";
+import { anchorStops, snapEnds } from "../graph/anchor";
+import { metres } from "../graph/geo";
 import { buildSegments, type RouteForGraph } from "../graph/segments";
 import { PRECISION, roundPoint, tidy } from "../graph/simplify";
 import { dedupeStops } from "../graph/stops";
@@ -46,7 +48,10 @@ export function colour(c: string | undefined): string | undefined {
 
 const inside = ([lon, lat]: LonLat, [w, s, e, n]: BBox) => lon >= w && lon <= e && lat >= s && lat <= n;
 
-export interface NetworkBuild { file: NetworkFile; report: string[] }
+/** Fine geometry for network.detail.json, by segment index; null where network.json's is already exact. */
+export type Detail = (LonLat[] | null)[];
+
+export interface NetworkBuild { file: NetworkFile; detail: Detail; report: string[] }
 
 /** Modes whose geometry gives way first when a file is over budget, and how far, step by step. */
 const MINOR: Mode[] = ["bus", "trolleybus", "express_bus"];
@@ -59,7 +64,7 @@ const tally = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) ?? 0) + 
 /** `year` is the year the OSM data is from; groups' coverage starts there. */
 export function buildNetwork(osm: OsmIndex, cfg: MapConfig, year: number, budget = BUDGET[SCOPE_TYPE[cfg.scope]]): NetworkBuild {
   const report: string[] = [];
-  const { tolerance, decimals } = PRECISION[cfg.scope];
+  const precision = PRECISION[cfg.scope], { decimals } = precision;
   // Whole-line maps keep lines that touch the bbox, but not ones that run far beyond it.
   const bounds = cfg.clip === "whole-line" && cfg.scope !== "world" ? mapBounds(cfg.bbox, cfg.clip) : null;
 
@@ -137,12 +142,6 @@ export function buildNetwork(osm: OsmIndex, cfg: MapConfig, year: number, budget
     if (before > raw.length) report.push(`clip: dropped ${before - raw.length} segments outside the bbox`);
   }
 
-  const used = new Set(raw.flatMap((s) => [s.from, s.to]));
-  const stops: Stop[] = graphStops
-    .filter((s) => used.has(s.id))
-    .map((s) => ({ id: s.id, name: s.name, geo: roundPoint(s.geo, decimals) }));
-  const usedLines = new Set(raw.flatMap((s) => (s.lines ?? []).map((l) => (typeof l === "string" ? l : l.id))));
-
   // Groups: those with a mode that occurs. No history yet, so coverage starts this year.
   const modes = new Set(raw.map((s) => s.mode));
   const groups: GroupDef[] = (cfg.groups ?? DEFAULT_GROUPS)
@@ -151,21 +150,45 @@ export function buildNetwork(osm: OsmIndex, cfg: MapConfig, year: number, budget
   const orphan = [...modes].filter((m) => !groups.some((g) => g.modes.includes(m)));
   if (orphan.length) report.push(`warning: no group for ${orphan.join(", ")}; those segments would not be drawn`);
 
-  // Simplify; if the file is over budget, simplify the minor modes harder until it fits.
+  // One point per stop, on its most prominent group's track (groups that fade in schematic view
+  // count least), and every segment ends there.
+  const rank = new Map<Mode, number>();
+  [...groups].sort((a, b) => Number(!a.schematic) - Number(!b.schematic))
+    .forEach((g, i) => g.modes.forEach((m) => { if (!rank.has(m)) rank.set(m, i); }));
+  const anchors = anchorStops(raw, (m) => rank.get(m) ?? Infinity);
+  raw = raw.map((s) => (s.geo ? { ...s, geo: snapEnds(s.geo, anchors.get(s.from)!, anchors.get(s.to)!) } : s));
+  const moved = graphStops.flatMap((s) => (anchors.has(s.id) ? [metres(s.geo, anchors.get(s.id)!)] : [])).sort((a, b) => a - b);
+  if (moved.length) report.push(`stops placed on their track: ${moved.length}, moved ${moved[Math.floor(moved.length / 2)].toFixed(0)} m (median), ${moved.at(-1)!.toFixed(0)} m at most`);
+
+  const used = new Set(raw.flatMap((s) => [s.from, s.to]));
+  const stops: Stop[] = graphStops
+    .filter((s) => used.has(s.id))
+    .map((s) => ({ id: s.id, name: s.name, geo: roundPoint(anchors.get(s.id) ?? s.geo, decimals) }));
+  const usedLines = new Set(raw.flatMap((s) => (s.lines ?? []).map((l) => (typeof l === "string" ? l : l.id))));
+
+  // Coarse geometry in network.json; if that is over budget, the minor modes get coarser still.
   const shape = (minorTolerance: number) => raw.map((s): Segment => {
     if (!s.geo) return s;
-    const t = MINOR.includes(s.mode) ? minorTolerance : tolerance;
+    const t = MINOR.includes(s.mode) ? minorTolerance : precision.coarse;
     if (t === Infinity) { const { geo: _, ...rest } = s; return rest; }
     return { ...s, geo: tidy(s.geo, t, decimals) };
   });
   const make = (segments: Segment[]): NetworkFile => ({ groups, lines: lines.filter((l) => usedLines.has(l.id)), stops, segments });
   const size = (f: NetworkFile) => Buffer.byteLength(formatNetwork(f));
-  let file = make(shape(tolerance));
-  for (const t of FIT_TOLERANCES) {
+  let file = make(shape(precision.coarse));
+  for (const t of FIT_TOLERANCES.filter((t) => t > precision.coarse)) {
     if (size(file) <= budget) break;
     file = make(shape(t));
     report.push(`over the ${(budget / 1024 / 1024).toFixed(1)} MB budget: ${MINOR.join("/")} geometry ${t === Infinity ? "left straight" : `simplified to ${t} m`}`);
   }
+
+  // Fine geometry for the detail file, loaded after the first paint.
+  const detail: Detail = raw.map((s, i) => {
+    if (!s.geo) return null;
+    const fine = tidy(s.geo, MINOR.includes(s.mode) ? precision.fine.minor : precision.fine.major, decimals);
+    const coarse = file.segments[i].geo;
+    return coarse && JSON.stringify(coarse) === JSON.stringify(fine) ? null : fine;
+  });
 
   // What is in it, by mode.
   const perMode = new Map<Mode, { n: number; bytes: number }>();
@@ -183,8 +206,14 @@ export function buildNetwork(osm: OsmIndex, cfg: MapConfig, year: number, budget
     report.push(`  ${m}: ${ls.map((l) => `${l.ref ?? "?"}${l.color ? ` ${l.color}` : " (no colour)"}`).join(", ")}`);
   }
 
-  return { file, report };
+  const extra = detail.filter(Boolean).length;
+  report.push(`detail: finer geometry for ${extra} of ${file.segments.length} segments`);
+  return { file, detail, report };
 }
+
+/** The detail file: one segment's geometry (or null) per line, in network.json's segment order. */
+export const formatDetail = (d: Detail) =>
+  `{\n  "segments": [\n${d.map((g) => `    ${JSON.stringify(g)}`).join(",\n")}\n  ]\n}\n`;
 
 /** One array element per line: small diffs between runs, without the bulk of full indentation. */
 export function formatNetwork(f: NetworkFile): string {

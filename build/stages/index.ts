@@ -7,7 +7,7 @@ import type { CacheOptions } from "../sources/cache";
 import { OsmIndex } from "../sources/osm";
 import { overpass } from "../sources/overpass";
 import { basemapFeatures, basemapIndex, basemapQuery, formatFeatures, shapeBasemap } from "./basemap";
-import { buildNetwork, formatNetwork, routesQuery } from "./network";
+import { buildNetwork, formatDetail, formatNetwork, routesQuery } from "./network";
 
 export const STAGES = ["network", "basemap", "landmarks"] as const;
 export type Stage = (typeof STAGES)[number];
@@ -29,13 +29,15 @@ async function network(ctx: StageContext): Promise<StageResult> {
   const res = await overpass(routesQuery(ctx.cfg.bbox), ctx.cache);
   // The year of the OSM snapshot, not of this run, so a rebuild from the cache comes out the same.
   const year = Number(res.osm3s?.timestamp_osm_base?.slice(0, 4)) || new Date().getFullYear();
-  const { file, report } = buildNetwork(new OsmIndex(res.elements), ctx.cfg, year);
+  const { file, detail, report } = buildNetwork(new OsmIndex(res.elements), ctx.cfg, year);
   if (!file.segments.length) throw new Error("no segments: nothing in the bbox matched the profile");
-  const text = formatNetwork(file);
-  const changed = await writeIfChanged(join(ctx.outDir, "network.json"), text, ctx.dryRun);
+  const text = formatNetwork(file), more = formatDetail(detail);
+  const a = await writeIfChanged(join(ctx.outDir, "network.json"), text, ctx.dryRun);
+  const b = await writeIfChanged(join(ctx.outDir, "network.detail.json"), more, ctx.dryRun);
+  const mb = (t: string) => (Buffer.byteLength(t) / 1024 / 1024).toFixed(2);
   return {
-    status: "done", note: `${(text.length / 1024 / 1024).toFixed(2)} MB, OSM data of ${res.osm3s?.timestamp_osm_base ?? "unknown date"}`,
-    details: report, attribution: [OSM_CREDIT], changed,
+    status: "done", note: `${mb(text)} MB + ${mb(more)} MB detail, OSM data of ${res.osm3s?.timestamp_osm_base ?? "unknown date"}`,
+    details: report, attribution: [OSM_CREDIT], changed: a || b,
   };
 }
 

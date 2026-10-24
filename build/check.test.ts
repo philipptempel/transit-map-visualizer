@@ -84,6 +84,17 @@ describe("check-data", () => {
       ]);
     });
 
+    it("checks the detail file against the network", async () => {
+      const file = join(root, "data", "demostadt", "network.detail.json");
+      const segments: unknown[] = net.segments.map(() => null);
+      segments[0] = [[0.095, 0.142], [0.13, 0.148], [0.168, 0.15]];   // Hafen to Markt, as it should be
+      segments[1] = [[0.1, 0.1], [0.2, 0.2]];                          // does not start at Markt
+      await writeFile(file, JSON.stringify({ segments }));
+      expect(await problems(net)).toEqual(["network.detail.json: segment 1 (mk → dm): does not run from stop to stop"]);
+      await writeFile(file, JSON.stringify({ segments: segments.slice(1) }));
+      expect(await problems(net)).toEqual([`network.detail.json: ${net.segments.length - 1} entries for ${net.segments.length} segments`]);
+    });
+
     it("flags an available map without data", async () => {
       await rm(join(root, "data", "demostadt", "network.json"));
       expect((await checkAll(join(root, "data"))).flatMap((r) => r.problems)).toEqual(["network.json is missing"]);

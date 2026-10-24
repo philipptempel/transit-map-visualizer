@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { demostadt } from "../__fixtures__/load";
 import { checkNetwork } from "../check";
 import type { MapConfig } from "../config";
-import { buildNetwork, colour, formatNetwork, routesQuery } from "./network";
+import { buildNetwork, colour, formatDetail, formatNetwork, routesQuery } from "./network";
 
 const cfg: MapConfig = {
   id: "demo", name: "Demo", scope: "city", network: "transit",
@@ -22,7 +22,8 @@ describe("buildNetwork", () => {
 
   it("keeps only the stops segments use, rounded", () => {
     expect(file.stops.map((s) => s.id)).toEqual(["n3", "n5", "n7", "n8", "r100"]);
-    expect(file.stops.find((s) => s.id === "r100")).toEqual({ id: "r100", name: "Westpark", geo: [0.0283, 0.1284] });
+    // On its track (the stop position), not at the station node beside it.
+    expect(file.stops.find((s) => s.id === "r100")).toEqual({ id: "r100", name: "Westpark", geo: [0.028, 0.128] });
   });
 
   it("lists only groups that occur, with coverage from the data's year and no dates", () => {
@@ -88,7 +89,6 @@ describe("buildNetwork reports", () => {
   it("simplifies bus geometry harder, then drops it, to fit the budget; rail keeps its track", () => {
     const { file, report } = buildNetwork(demostadt(), cfg, 2026, 1000);   // too small even with straight buses
     expect(report.filter((r) => r.startsWith("over the"))).toEqual([
-      "over the 0.0 MB budget: bus/trolleybus/express_bus geometry simplified to 15 m",
       "over the 0.0 MB budget: bus/trolleybus/express_bus geometry simplified to 30 m",
       "over the 0.0 MB budget: bus/trolleybus/express_bus geometry simplified to 60 m",
       "over the 0.0 MB budget: bus/trolleybus/express_bus geometry simplified to 120 m",
@@ -113,6 +113,39 @@ describe("buildNetwork reports", () => {
 
   it("leaves a file under budget alone", () => {
     expect(buildNetwork(demostadt(), cfg, 2026).report.some((r) => r.startsWith("over the"))).toBe(false);
+  });
+});
+
+describe("stops and detail", () => {
+  const { file, detail, report } = buildNetwork(demostadt(), cfg, 2026);
+
+  it("ends every segment exactly at its stops' points", () => {
+    const at = new Map(file.stops.map((s) => [s.id, s.geo] as const));
+    for (const s of file.segments) {
+      if (!s.geo) continue;
+      expect(s.geo[0]).toEqual(at.get(s.from));
+      expect(s.geo.at(-1)).toEqual(at.get(s.to));
+    }
+    expect(report.find((r) => r.startsWith("stops placed"))).toMatch(/^stops placed on their track: 4,/);   // n7 has no track in the fixture
+  });
+
+  it("puts a stop on the track of its most prominent group, not the bus stop beside it", () => {
+    // Markt is the tram stop position n5 and the bus platform n6, 80 m apart; the tram wins.
+    expect(file.stops.find((s) => s.id === "n5")!.geo).toEqual([0.168, 0.15]);
+  });
+
+  it("keeps one detail entry per segment, null where network.json is already exact", () => {
+    expect(detail).toHaveLength(file.segments.length);
+    // The fixture's tracks are already as simple as they get.
+    expect(detail.every((d) => d === null)).toBe(true);
+    expect(JSON.parse(formatDetail(detail))).toEqual({ segments: detail });
+  });
+
+  it("carries the finer geometry when network.json's is coarser", () => {
+    const { file: f, detail: d } = buildNetwork(demostadt(), cfg, 2026, 1000);   // forces straight buses
+    const bus = f.segments.findIndex((s) => s.mode === "express_bus");
+    expect(f.segments[bus].geo).toBeUndefined();
+    expect(d[bus]).toHaveLength(3);
   });
 });
 
