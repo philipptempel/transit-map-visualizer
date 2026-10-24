@@ -1,18 +1,15 @@
 import type { MapConfig } from "../config";
 
-const NOT_BUS = /^(?!(?:bus|trolleybus)$)/;
-
-// Match rules are starting guesses; verify against what the data actually says.
 export default {
   id: "stuttgart", name: "Stuttgart", scope: "city", network: "transit",
   continent: "Europe", country: "DE", state: "Baden-Württemberg",
   bbox: [8.75, 48.55, 9.55, 49.00],
   clip: "whole-line", profile: "local",
   sBahnLike: [{ ref: /^S\d+$/ }],
-  // A region with several bus networks can have more than one line 10, so none of these may catch a bus.
+  // Checked against OSM data of 2026-10-24: the Standseilbahn (20) is tagged route=funicular and
+  // the Stadtbahn (U1 to U19) route=light_rail, so they need no override. The Zacke is route=tram.
+  // Matching on route=tram too keeps it off any bus line 10 elsewhere in the region.
   overrides: [
-    { match: { ref: /^10$/, route: NOT_BUS }, mode: "rack_railway" },   // Zacke
-    { match: { ref: /^20$/, route: NOT_BUS }, mode: "funicular" },      // Standseilbahn
-    { match: { ref: /^U\d+$/, route: NOT_BUS }, mode: "light_rail" },   // Stadtbahn, whatever OSM calls it
+    { match: { ref: /^10$/, route: /^tram$/ }, mode: "rack_railway" },   // Zacke
   ],
 } satisfies MapConfig;
