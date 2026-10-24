@@ -6,9 +6,9 @@ import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader,
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { distinct, isAvailable, MAP_TYPE_LABELS, matches, sortEntries, type Filters, type SortDir, type SortKey } from "@/catalog";
+import { distinct, isAvailable, MAP_TYPE_LABELS, matches, NETWORK_LABELS, sortEntries, type Filters, type SortDir, type SortKey } from "@/catalog";
 import { cn } from "@/lib/utils";
-import type { CityEntry, MapType } from "@/schema";
+import type { MapEntry, MapType, Network } from "@/schema";
 
 type Option = [value: string, label: string];
 
@@ -56,7 +56,7 @@ function FilterSelect({ id, label, allLabel, hint = allLabel, value, options, on
   );
 }
 
-function MapCard({ entry: c }: { entry: CityEntry }) {
+function MapCard({ entry: c }: { entry: MapEntry }) {
   const ready = isAvailable(c);
   const where = c.fictional
     ? "Fictional demo city"
@@ -67,7 +67,10 @@ function MapCard({ entry: c }: { entry: CityEntry }) {
       <CardHeader>
         <CardTitle className="text-lg">{c.name}</CardTitle>
         <CardDescription>{where}</CardDescription>
-        <CardAction><Badge variant="secondary">{MAP_TYPE_LABELS[c.type]}</Badge></CardAction>
+        <CardAction className="flex gap-1">
+          <Badge variant="secondary">{MAP_TYPE_LABELS[c.type]}</Badge>
+          <Badge variant="outline">{NETWORK_LABELS[c.network]}</Badge>
+        </CardAction>
       </CardHeader>
       <CardContent>
         <dl className="grid grid-cols-2 gap-2 text-xs">
@@ -91,7 +94,7 @@ function MapCard({ entry: c }: { entry: CityEntry }) {
   );
 }
 
-export function MapCatalog({ entries }: { entries: CityEntry[] }) {
+export function MapCatalog({ entries }: { entries: MapEntry[] }) {
   const [sort, setSort] = useState("name:asc");
   const [f, setF] = useState<Filters>({});
   const reset = () => { setF({}); setSort("name:asc"); };
@@ -102,6 +105,7 @@ export function MapCatalog({ entries }: { entries: CityEntry[] }) {
     const inCountry = inContinent.filter((c) => f.country && c.country === f.country);
     return {
       types: distinct(entries, "type").map((t): Option => [t, MAP_TYPE_LABELS[t as MapType]]).sort(byLabel),
+      networks: distinct(entries, "network").map((n): Option => [n, NETWORK_LABELS[n as Network]]).sort(byLabel),
       continents: distinct(entries, "continent").map((v): Option => [v, v]).sort(byLabel),
       countries: distinct(inContinent, "country").map((v): Option => [v, countryName(v)]).sort(byLabel),
       states: distinct(inCountry, "state").map((v): Option => [v, v]).sort(byLabel),
@@ -123,7 +127,7 @@ export function MapCatalog({ entries }: { entries: CityEntry[] }) {
       </div>
 
       <Card size="sm" className="mt-4">
-        <CardContent className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <CardContent className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
           <Field className="gap-1.5">
             <FieldLabel htmlFor="sort" className="text-xs text-muted-foreground">Sort by</FieldLabel>
             <Select value={sort} onValueChange={setSort}>
@@ -137,6 +141,8 @@ export function MapCatalog({ entries }: { entries: CityEntry[] }) {
           </Field>
           <FilterSelect id="f-type" label="Type" allLabel="All types" options={menus.types}
             value={f.type} onChange={(v) => setF({ ...f, type: v as MapType | undefined })} />
+          <FilterSelect id="f-network" label="Network" allLabel="All networks" options={menus.networks}
+            value={f.network} onChange={(v) => setF({ ...f, network: v as Network | undefined })} />
           {/* Changing a level clears the levels below it. */}
           <FilterSelect id="f-continent" label="Continent" allLabel="All continents" options={menus.continents}
             value={f.continent} onChange={(v) => setF({ ...f, continent: v, country: undefined, state: undefined })} />

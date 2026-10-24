@@ -25,11 +25,11 @@
     { "from": "hf", "to": "mk", "mode": "tram", "lines": ["d-1"], "start": "1965" },
     { "from": "mk", "to": "dm", "mode": "tram", "lines": ["d-1"], "start": "1965" },
     { "from": "hf", "to": "wf", "mode": "tram", "lines": ["d-1"], "start": "1965", "end": "1988" },
-    { "from": "wp", "to": "hf", "mode": "tram", "lines": ["d-1"], "start": "1978" },
+    { "from": "hf", "to": "wp", "mode": "tram", "lines": ["d-1"], "start": "1978" },
     { "from": "dm", "to": "nt", "mode": "tram", "lines": ["d-1"], "start": "1984" },
     { "from": "mk", "to": "bf", "mode": "light_rail", "lines": ["d-2"], "start": "1972" },
-    { "from": "kl", "to": "mk", "mode": "light_rail", "lines": ["d-2"], "start": "1981" },
-    { "from": "un", "to": "kl", "mode": "light_rail", "lines": ["d-2"], "start": "1996" },
+    { "from": "mk", "to": "kl", "mode": "light_rail", "lines": ["d-2"], "start": "1981" },
+    { "from": "kl", "to": "un", "mode": "light_rail", "lines": ["d-2"], "start": "1996" },
     { "from": "ms", "to": "bf", "mode": "express_bus", "lines": ["d-x"], "start": "1999" },
     { "from": "bf", "to": "dm", "mode": "express_bus", "lines": ["d-x"], "start": "1999" }
   ]

@@ -1,8 +1,8 @@
-import { geoMercator, type GeoProjection } from "d3-geo";
+import { geoEqualEarth, geoMercator, type GeoProjection } from "d3-geo";
 import { select } from "d3-selection";
 import { zoom, zoomIdentity, type D3ZoomEvent, type ZoomTransform } from "d3-zoom";
 import type { MultiPoint } from "geojson";
-import type { CityEntry, DateLike, LonLat, ToggleGroup } from "./schema";
+import type { DateLike, LonLat, MapEntry, ToggleGroup } from "./schema";
 
 export type Point = [x: number, y: number];
 export interface Life { grow: number; alpha: number }
@@ -23,7 +23,7 @@ export interface RenderState {
 
 export interface Ctx {
   readonly g: CanvasRenderingContext2D;
-  readonly city: CityEntry;
+  readonly map: MapEntry;
   readonly state: RenderState;
   readonly projection: GeoProjection;
   project(ll: LonLat): Point;
@@ -47,10 +47,16 @@ export interface Plugin {
   draw?(ctx: Ctx): void;
 }
 
-export interface Snapshot { year: number; morph: number; playing: boolean; speed: number; range: [number, number]; badges: string[] }
+export interface Snapshot {
+  year: number; morph: number; playing: boolean; speed: number; range: [number, number]; badges: string[];
+  zoom: number; zoomRange: [number, number];
+}
+
+/** How far the map zooms out and in, relative to the map's bbox fitting the canvas. */
+export const ZOOM_RANGE: [number, number] = [0.5, 50];
 
 export interface RendererOptions {
-  canvas: HTMLCanvasElement; city: CityEntry; plugins: Plugin[];
+  canvas: HTMLCanvasElement; map: MapEntry; plugins: Plugin[];
   yearsPerSecond?: number; rampYears?: number;
 }
 
@@ -69,6 +75,11 @@ export interface Renderer {
   pause(): void;
   setSpeed(speed: number): void;
   setMode(target: 0 | 1, ms?: number): void;
+  /** Zoom about the centre of the canvas, within ZOOM_RANGE. They do nothing before `ready`. */
+  zoomBy(factor: number): void;
+  zoomTo(k: number): void;
+  /** Back to the whole map, centred. */
+  resetZoom(): void;
   onChange(cb: (s: Snapshot) => void): () => void;
 }
 
@@ -83,9 +94,11 @@ export function toYear(d: DateLike): number | null {
 
 export const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
+/** The JSON at `url`, or null if there is none. Dev servers answer a missing file with their HTML page. */
 export async function getJson<T>(url: string): Promise<T | null> {
   const res = await fetch(url);
-  return res.ok ? ((await res.json()) as T) : null;
+  if (!res.ok || !res.headers.get("content-type")?.includes("json")) return null;
+  return (await res.json()) as T;
 }
 
 export function resample(pts: Point[], n: number): Point[] {
@@ -105,30 +118,71 @@ export function resample(pts: Point[], n: number): Point[] {
   return out;
 }
 
-export function cutAt(pts: Point[], f: number): Point[] {
-  if (f >= 1) return pts;
-  const x = f * (pts.length - 1), i = Math.floor(x), r = x - i;
-  const out = pts.slice(0, i + 1);
-  if (i + 1 < pts.length) {
-    out.push([pts[i][0] + (pts[i + 1][0] - pts[i][0]) * r, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * r]);
-  }
-  return out;
+/** How far along the line each point lies, from 0 at the first to 1 at the last. */
+export function along(pts: Point[]): number[] {
+  const acc = [0];
+  for (let i = 1; i < pts.length; i++) acc.push(acc[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  const total = acc[acc.length - 1] || 1;
+  return acc.map((d) => d / total);
 }
 
-export function offset(pts: Point[], d: number): Point[] {
+/** The first `f` of the line, measured by length. */
+export function cutAt(pts: Point[], f: number): Point[] {
+  if (f >= 1) return pts;
+  if (f <= 0) return pts.slice(0, 1);
+  const t = along(pts);
+  let i = 0;
+  while (i < pts.length - 2 && t[i + 1] < f) i++;
+  const r = (f - t[i]) / (t[i + 1] - t[i] || 1);
+  return [...pts.slice(0, i + 1), [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * r, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * r]];
+}
+
+/** Douglas–Peucker in screen units: drops points closer than `tol` to the line through their neighbours. */
+export function simplify(pts: Point[], tol: number): Point[] {
+  if (pts.length < 3) return pts;
+  const keep = new Uint8Array(pts.length);
+  keep[0] = keep[pts.length - 1] = 1;
+  const stack: [number, number][] = [[0, pts.length - 1]];
+  while (stack.length) {
+    const [a, b] = stack.pop()!;
+    const [ax, ay] = pts[a], dx = pts[b][0] - ax, dy = pts[b][1] - ay, len2 = dx * dx + dy * dy;
+    let far = -1, max = tol;
+    for (let i = a + 1; i < b; i++) {
+      const px = pts[i][0] - ax, py = pts[i][1] - ay;
+      const t = len2 ? Math.max(0, Math.min(1, (px * dx + py * dy) / len2)) : 0;   // to the segment, not the line
+      const d = Math.hypot(px - dx * t, py - dy * t);
+      if (d > max) { max = d; far = i; }
+    }
+    if (far < 0) continue;
+    keep[far] = 1;
+    stack.push([a, far], [far, b]);
+  }
+  return pts.filter((_, i) => keep[i]);
+}
+
+/**
+ * Shifts a line sideways by `d`, or by `d(i)` at point i, to the left of its direction. `before`
+ * and `after` are the neighbouring points of the lines it joins at either end, if any, so both
+ * shift the same way at the joint and meet (a mitre join) instead of leaving a step.
+ */
+export function offset(pts: Point[], d: number | ((i: number) => number), before?: Point, after?: Point): Point[] {
   if (!d) return pts;
+  const at = typeof d === "number" ? () => d : d;
+  const last = pts.length - 1;
   return pts.map((p, i): Point => {
-    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
+    const a = i === 0 && before ? before : pts[Math.max(0, i - 1)];
+    const b = i === last && after ? after : pts[Math.min(last, i + 1)];
     const dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy) || 1;
-    return [p[0] - (dy / len) * d, p[1] + (dx / len) * d];
+    const di = at(i);
+    return [p[0] - (dy / len) * di, p[1] + (dx / len) * di];
   });
 }
 
 export function createRenderer({
-  canvas, city, plugins, yearsPerSecond = 4, rampYears = 0.75,
+  canvas, map, plugins, yearsPerSecond = 4, rampYears = 0.75,
 }: RendererOptions): Renderer {
   const g = canvas.getContext("2d") ?? fail("Canvas 2D context unavailable");
-  const projection = geoMercator();
+  const projection = map.projection === "equalEarth" ? geoEqualEarth() : geoMercator();
   const order = [...plugins].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const broken = new Set<Plugin>();
   const live = () => order.filter((p) => !broken.has(p));
@@ -142,9 +196,12 @@ export function createRenderer({
   const range: [number, number] = [Infinity, -Infinity];
   let frame = 0;
   let run = 0;   // bumped on every play(), so a loop from an earlier play() stops
+  const zoomer = zoom<HTMLCanvasElement, unknown>().scaleExtent(ZOOM_RANGE);
+  const canvasSel = select(canvas);
+  let zoomReady = false;
 
   const ctx: Ctx = {
-    g, city, state, projection,
+    g, map, state, projection,
     project: (ll) => projection(ll) ?? [NaN, NaN],
     lerp: (a, b, m = state.morph) => [a[0] + (b[0] - a[0]) * m, a[1] + (b[1] - a[1]) * m],
     life(start, end) {
@@ -182,6 +239,7 @@ export function createRenderer({
     const snap: Snapshot = {
       year: state.year, morph: state.morph, playing: state.playing, speed: state.speed,
       range: [range[0], range[1]], badges: [...badges.values()],
+      zoom: t.k, zoomRange: ZOOM_RANGE,
     };
     listeners.forEach((cb) => cb(snap));
   }
@@ -193,7 +251,7 @@ export function createRenderer({
     state.height = r.height;
     canvas.width = Math.round(r.width * state.dpr);
     canvas.height = Math.round(r.height * state.dpr);
-    const [w, s, e, n] = city.bbox;
+    const [w, s, e, n] = map.bbox;
     const extent: MultiPoint = { type: "MultiPoint", coordinates: [[w, s], [e, n]] };
     projection.fitExtent([[24, 24], [r.width - 24, r.height - 24]], extent);
     for (const p of live()) {
@@ -245,11 +303,9 @@ export function createRenderer({
     if (!Number.isFinite(range[0])) range[0] = 1900;
     range[1] = Math.max(range[1], new Date().getFullYear());
     state.year = range[0];
-    select(canvas).call(
-      zoom<HTMLCanvasElement, unknown>()
-        .scaleExtent([0.5, 50])
-        .on("zoom", (e: D3ZoomEvent<HTMLCanvasElement, unknown>) => { state.t = e.transform; schedule(); }),
-    );
+    zoomer.on("zoom", (e: D3ZoomEvent<HTMLCanvasElement, unknown>) => { state.t = e.transform; schedule(); });
+    canvasSel.call(zoomer);
+    zoomReady = true;
     new ResizeObserver(resize).observe(canvas);
   })();
 
@@ -268,6 +324,9 @@ export function createRenderer({
     pause() { state.playing = false; schedule(); },
     setSpeed(speed) { state.speed = speed; schedule(); },
     setMode,
+    zoomBy(factor) { if (zoomReady) zoomer.scaleBy(canvasSel, factor); },
+    zoomTo(k) { if (zoomReady) zoomer.scaleTo(canvasSel, k); },
+    resetZoom() { if (zoomReady) zoomer.transform(canvasSel, zoomIdentity); },
     onChange(cb) { listeners.add(cb); return () => { listeners.delete(cb); }; },
   };
 }

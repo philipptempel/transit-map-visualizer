@@ -14,7 +14,7 @@ export function landmarks({ url, color = "#b03a2e", labelZoom = 1.5 }: LandmarkO
     async init(ctx) {
       items = (await getJson<Landmark[]>(url)) ?? [];
       items.forEach((it) => ctx.extendRange(it.start, it.end));
-      ctx.addGroup({ id: "landmarks", label: "Landmarks", defaultOn: true });
+      if (items.length) ctx.addGroup({ id: "landmarks", label: "Landmarks", defaultOn: true });   // no toggle for nothing
     },
 
     onProject(ctx) {

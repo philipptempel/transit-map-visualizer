@@ -1,21 +1,32 @@
-import type { GroupDef, Mode } from "../src/schema";
-export type { Mode } from "../src/schema";
+import type { BBox, GroupDef, MapType, Mode, Network, Projection } from "../src/schema";
+export type { Mode, Network } from "../src/schema";
 
 export type Include = Record<Mode, boolean>;
 
+const NONE: Include = {
+  tram: false, tram_train: false, light_rail: false, metro: false, s_bahn: false,
+  funicular: false, rack_railway: false, aerialway: false,
+  bus: false, express_bus: false, trolleybus: false, ferry: false,
+  suburban_rail: false, regional_rail: false, domestic_rail: false, international_rail: false,
+  flight: false, cruise: false, ocean_liner: false,
+};
 const LOCAL: Include = {
+  ...NONE,
   tram: true, tram_train: true, light_rail: true, metro: true, s_bahn: true,
   funicular: true, rack_railway: true, aerialway: true,
   bus: true, express_bus: true, trolleybus: true, ferry: true,
-  suburban_rail: false, regional_rail: false, domestic_rail: false, international_rail: false,
 };
-const NONE = Object.fromEntries(Object.keys(LOCAL).map((k) => [k, false])) as Include;
 
 export const PROFILES = {
   local: LOCAL,
   "local-plus-regional": { ...LOCAL, suburban_rail: true, regional_rail: true },
   "national-rail": { ...NONE, regional_rail: true, domestic_rail: true },
+  "continental-rail": { ...NONE, domestic_rail: true, international_rail: true },
+  air: { ...NONE, flight: true },
+  sea: { ...NONE, ferry: true, cruise: true, ocean_liner: true },
 } satisfies Record<string, Include>;
+
+export type Profile = keyof typeof PROFILES;
 
 export const DEFAULT_GROUPS: GroupDef[] = [
   { id: "tram",        label: "Tram",              modes: ["tram"],                color: "#c0392b", defaultOn: true,  schematic: true },
@@ -29,48 +40,35 @@ export const DEFAULT_GROUPS: GroupDef[] = [
   { id: "rail",        label: "Rail",              modes: ["suburban_rail", "regional_rail", "domestic_rail", "international_rail"], color: "#34495e", defaultOn: true, schematic: true },
 ];
 
-export interface Match { ref?: RegExp; name?: RegExp; network?: RegExp; operator?: RegExp }
+export type Scope = "city" | "region" | "country" | "continent" | "world";
 
-export interface CityConfig {
+export const SCOPE_TYPE: Record<Scope, MapType> = {
+  city: "local", region: "regional", country: "national", continent: "continental", world: "global",
+};
+
+/** Every given field must match. `route` is the OSM route tag (tram, bus, train, ...). */
+export interface Match { ref?: RegExp; name?: RegExp; network?: RegExp; operator?: RegExp; route?: RegExp }
+
+/** An airline or shipping company drawn as one line; `from`/`to` bound the years it operated. */
+export interface Operator { name: string; color: string; from?: string; to?: string }
+
+/** One map, in build/maps/<id>.ts. Everything the fetch step needs to rebuild it. */
+export interface MapConfig {
   id: string; name: string;
-  country: string;                              // ISO 3166-1 alpha-2, used for "international"
-  bbox: [number, number, number, number];       // W, S, E, N
+  scope: Scope;
+  network: Network;
+  continent?: string;                           // catalog fields, e.g. "Europe", "DE", "Baden-Württemberg"
+  country?: string;                             // ISO 3166-1 alpha-2; also decides what counts as "international"
+  state?: string;
+  bbox: BBox;                                   // W, S, E, N
   clip: "bbox" | "whole-line";                  // cut at bbox, or keep any line touching it
-  profile: keyof typeof PROFILES;
-  include?: Partial<Include>;                   // per-city tweaks on top of the profile
+  profile: Profile;
+  include?: Partial<Include>;                   // per-map tweaks on top of the profile
   sBahnLike?: Match[];                          // heavy-rail routes that count as S-Bahn
   overrides?: { match: Match; mode: Mode }[];   // force a mode, checked first
+  exclude?: Match[];                            // routes to leave out that no tag marks
+  lineColors?: Partial<Record<Mode, string>>;   // colour every line of a mode, whatever OSM says
   groups?: GroupDef[];
+  operators?: Operator[];                       // air and sea: the operator and its predecessors
+  projection?: Projection;
 }
-
-// Match rules are starting guesses; verify against what the feeds actually say.
-export const CITIES: CityConfig[] = [
-  {
-    id: "nantes", name: "Nantes", country: "FR", bbox: [-1.80, 47.10, -1.35, 47.35],
-    clip: "bbox", profile: "local",
-    overrides: [{ match: { name: /busway/i }, mode: "express_bus" }],
-  },
-  {
-    id: "stuttgart", name: "Stuttgart", country: "DE", bbox: [8.75, 48.55, 9.55, 49.00],
-    clip: "whole-line", profile: "local",
-    sBahnLike: [{ ref: /^S\d+$/ }],
-    overrides: [
-      { match: { ref: /^10$/ }, mode: "rack_railway" },   // Zacke
-      { match: { ref: /^20$/ }, mode: "funicular" },      // Standseilbahn
-      { match: { ref: /^U\d+$/ }, mode: "light_rail" },   // Stadtbahn, whatever the feed calls it
-    ],
-  },
-  {
-    id: "den-haag", name: "Den Haag", country: "NL", bbox: [4.18, 51.98, 4.45, 52.15],
-    clip: "whole-line", profile: "local",                 // whole-line keeps RandstadRail E to Rotterdam
-    overrides: [{ match: { network: /randstadrail/i }, mode: "light_rail" }],
-  },
-  {
-    id: "rotterdam", name: "Rotterdam", country: "NL", bbox: [4.30, 51.83, 4.65, 52.00],
-    clip: "bbox", profile: "local",
-  },
-  {
-    id: "france-rail", name: "France (rail)", country: "FR", bbox: [-5.2, 41.3, 9.6, 51.1],
-    clip: "bbox", profile: "national-rail",
-  },
-];

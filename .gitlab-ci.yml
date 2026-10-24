@@ -19,6 +19,8 @@ build:
     paths: [.npm/]
   script:
     - npm ci --cache .npm --prefer-offline
+    - npm test
+    - npm run check-data
     - npm run build
   artifacts:
     paths: [dist/]

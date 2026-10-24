@@ -1,4 +1,4 @@
-import { PROFILES, type CityConfig, type Match, type Mode } from "./config";
+import { PROFILES, type MapConfig, type Match, type Mode } from "./config";
 
 export interface RouteInfo {
   ref?: string; name?: string; network?: string; operator?: string;
@@ -7,10 +7,20 @@ export interface RouteInfo {
   countries?: string[];           // countries the route's stops lie in
 }
 
-const test = (m: Match, r: RouteInfo) =>
-  (["ref", "name", "network", "operator"] as const).every((k) => !m[k] || m[k]!.test(r[k] ?? ""));
+export const test = (m: Match, r: RouteInfo) =>
+  (["ref", "name", "network", "operator"] as const).every((k) => !m[k] || m[k]!.test(r[k] ?? "")) &&
+  (!m.route || m.route.test(r.osm?.route ?? ""));
+
+/** Long-distance coaches are tagged route=bus too; no map profile wants them as local buses. */
+export const isCoach = (t: Record<string, string>) =>
+  t.route === "bus" && (t.service === "long_distance" || t.service === "coach" || t.bus === "coach");
+
+/** Heritage and tourist services: museum trams, steam trains, sightseeing boats. No map keeps them. */
+export const isHeritage = (t: Record<string, string>) =>
+  (!!t.heritage && t.heritage !== "no") || ["tourism", "tourist", "heritage"].includes(t.service ?? "") || t.usage === "tourism";
 
 function fromOsm(t: Record<string, string>): Mode | null {
+  if (isCoach(t)) return null;
   switch (t.route) {
     case "tram": return "tram";
     case "light_rail": return "light_rail";
@@ -47,15 +57,15 @@ function fromGtfs(t: number): Mode | null {
 
 const HEAVY: Mode[] = ["suburban_rail", "regional_rail", "domestic_rail"];
 
-export function classify(r: RouteInfo, city: CityConfig): Mode | null {
-  const forced = city.overrides?.find((o) => test(o.match, r));
+export function classify(r: RouteInfo, map: MapConfig): Mode | null {
+  const forced = map.overrides?.find((o) => test(o.match, r));
   if (forced) return forced.mode;
   const mode = r.osm ? fromOsm(r.osm) : r.gtfsType != null ? fromGtfs(r.gtfsType) : null;
   if (!mode || !HEAVY.includes(mode)) return mode;
-  if (city.sBahnLike?.some((m) => test(m, r))) return "s_bahn";
-  if (r.countries?.some((c) => c !== city.country)) return "international_rail";
+  if (map.sBahnLike?.some((m) => test(m, r))) return "s_bahn";
+  if (map.country && r.countries?.some((c) => c !== map.country)) return "international_rail";
   return mode;
 }
 
-export const included = (mode: Mode, city: CityConfig) =>
-  ({ ...PROFILES[city.profile], ...city.include })[mode] ?? false;
+export const included = (mode: Mode, map: MapConfig) =>
+  ({ ...PROFILES[map.profile], ...map.include })[mode] ?? false;

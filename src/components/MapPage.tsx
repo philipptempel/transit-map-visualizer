@@ -1,5 +1,5 @@
 import { type MouseEvent, useEffect, useRef, useState } from "react";
-import { ArrowLeft, FastForward, Minus, Pause, Play, Plus, Rewind } from "lucide-react";
+import { ArrowLeft, FastForward, Minus, Pause, Play, Plus, Rewind, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup, ButtonGroupText } from "@/components/ui/button-group";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -14,9 +14,13 @@ import { basemap } from "@/plugins/basemap";
 import { landmarks } from "@/plugins/landmarks";
 import { network } from "@/plugins/network";
 import { createRenderer, type Renderer, type Snapshot } from "@/renderer";
-import type { CityEntry, ToggleGroup as Group } from "@/schema";
+import type { MapEntry, ToggleGroup as Group } from "@/schema";
 
 const SPEEDS = [0.25, 0.5, 1, 2, 4, 8];
+const ZOOM_STEP = 1.5;   // per click or key press
+
+/** "0.5×", "2.4×", "12×": one decimal while it matters. */
+const zoomLabel = (k: number) => `${k < 10 ? k.toFixed(1) : Math.round(k)}×`;
 
 /** Moves `by` steps along SPEEDS, faster when positive, keeping the direction. */
 function nudge(speed: number, by: number) {
@@ -39,14 +43,14 @@ const keepFocus = { onMouseDown: (e: MouseEvent) => e.preventDefault() };
 export function MapPage() {
   const entries = useCatalog();
   if (!entries) return null;
-  const cities = entries.filter(isAvailable);
+  const maps = entries.filter(isAvailable);
   const wanted = decodeURIComponent(location.pathname.match(/\/map\/([^/]+)\.html$/)?.[1] ?? "");
-  const city = cities.find((c) => c.id === wanted) ?? cities[0];
-  if (!city) return <p className="p-6 text-muted-foreground">No maps with data yet.</p>;
-  return <MapView city={city} cities={cities} />;
+  const map = maps.find((c) => c.id === wanted) ?? maps[0];
+  if (!map) return <p className="p-6 text-muted-foreground">No maps with data yet.</p>;
+  return <MapView map={map} maps={maps} />;
 }
 
-function MapView({ city, cities }: { city: CityEntry; cities: CityEntry[] }) {
+function MapView({ map, maps }: { map: MapEntry; maps: MapEntry[] }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const renderer = useRef<Renderer | null>(null);
   const [groups, setGroups] = useState<(Group & { on: boolean })[]>([]);
@@ -54,22 +58,22 @@ function MapView({ city, cities }: { city: CityEntry; cities: CityEntry[] }) {
   const [layout, setLayout] = useState("geo");
 
   // The renderer draws on its own; React only mirrors its state in the controls.
-  // It lives as long as the page, since picking another city reloads the page.
+  // It lives as long as the page, since picking another map reloads the page.
   useEffect(() => {
     if (renderer.current || !canvas.current) return;
     const r = createRenderer({
       canvas: canvas.current,
-      city,
+      map,
       plugins: [
-        basemap({ url: `data/${city.id}/basemap/index.json` }),
-        network({ url: `data/${city.id}/network.json` }),
-        landmarks({ url: `data/${city.id}/landmarks.json` }),
+        basemap({ url: `data/${map.id}/basemap/index.json` }),
+        network({ url: `data/${map.id}/network.json` }),
+        landmarks({ url: `data/${map.id}/landmarks.json` }),
       ],
     });
     renderer.current = r;
     r.onChange(setSnap);
     r.ready.then(() => setGroups(r.groups())).catch((err) => console.error(err));
-  }, [city]);
+  }, [map]);
 
   const r = renderer.current;
   const year = Math.floor(snap?.year ?? 0);
@@ -92,6 +96,9 @@ function MapView({ city, cities }: { city: CityEntry; cities: CityEntry[] }) {
     if (r) playAt(Math.sign(r.state.speed) === dir ? nudge(r.state.speed, 1) : dir);
   };
   const changeSpeed = (by: 1 | -1) => r?.setSpeed(nudge(r.state.speed, by));
+  const zoomIn = () => r?.zoomBy(ZOOM_STEP);
+  const zoomOut = () => r?.zoomBy(1 / ZOOM_STEP);
+  const resetZoom = () => r?.resetZoom();
 
   const loaded = snap !== null;
   useEffect(() => {
@@ -102,6 +109,10 @@ function MapView({ city, cities }: { city: CityEntry; cities: CityEntry[] }) {
       "]": () => changeSpeed(1),
       ArrowLeft: () => step(-1),
       ArrowRight: () => step(1),
+      "+": zoomIn,
+      "=": zoomIn,   // + without Shift on US-style layouts
+      "-": zoomOut,
+      "0": resetZoom,
     };
     const onKey = (e: KeyboardEvent) => {
       // Alt is allowed: some layouts, such as German on a Mac, type [ and ] with it.
@@ -121,11 +132,11 @@ function MapView({ city, cities }: { city: CityEntry; cities: CityEntry[] }) {
         <Button variant="outline" size="sm" asChild>
           <a href="./"><ArrowLeft data-icon="inline-start" /> All maps</a>
         </Button>
-        <Select value={city.id} onValueChange={(id) => { location.href = `map/${encodeURIComponent(id)}.html`; }}>
+        <Select value={map.id} onValueChange={(id) => { location.href = `map/${encodeURIComponent(id)}.html`; }}>
           <SelectTrigger size="sm" aria-label="Map"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectGroup>
-              {cities.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              {maps.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
             </SelectGroup>
           </SelectContent>
         </Select>
@@ -153,11 +164,39 @@ function MapView({ city, cities }: { city: CityEntry; cities: CityEntry[] }) {
       {/* The notes float over the map so the canvas keeps its size when they come and go. */}
       <div className="relative min-h-0">
         <canvas ref={canvas} id="map" className="absolute inset-0 block size-full touch-none bg-map" />
-        {!!snap?.badges.length && (
-          <ul id="badges" className="pointer-events-none absolute bottom-2 left-2 max-w-[calc(100%-1rem)] rounded-md bg-background/80 px-2 py-1 text-xs text-muted-foreground shadow-xs backdrop-blur-sm">
-            {snap.badges.map((b) => <li key={b}>{b}</li>)}
-          </ul>
+        {snap && (
+          <div id="zoom" className="absolute top-2 right-2 flex flex-col items-center gap-2 rounded-md bg-background/80 p-1 shadow-xs backdrop-blur-sm">
+            <Button variant="ghost" size="icon-sm" aria-label="Zoom in" title="Zoom in (+)"
+              disabled={snap.zoom >= snap.zoomRange[1] * 0.999} onClick={zoomIn} {...keepFocus}>
+              <ZoomIn />
+            </Button>
+            <Slider
+              orientation="vertical" aria-label="Zoom" step={0.01}
+              min={Math.log2(snap.zoomRange[0])} max={Math.log2(snap.zoomRange[1])} value={[Math.log2(snap.zoom)]}
+              onValueChange={([v]) => r?.zoomTo(2 ** v)}
+            />
+            <Button variant="ghost" size="icon-sm" aria-label="Zoom out" title="Zoom out (−)"
+              disabled={snap.zoom <= snap.zoomRange[0] * 1.001} onClick={zoomOut} {...keepFocus}>
+              <ZoomOut />
+            </Button>
+            <Button variant="ghost" size="sm" className="h-6 w-full px-1 text-xs tabular-nums" title="Reset zoom (0)"
+              aria-label={`Zoom ${zoomLabel(snap.zoom)}, reset`} onClick={resetZoom} {...keepFocus}>
+              {zoomLabel(snap.zoom)}
+            </Button>
+          </div>
         )}
+        <div className="pointer-events-none absolute inset-x-2 bottom-2 flex flex-wrap items-end justify-between gap-2 text-xs text-muted-foreground">
+          {!!snap?.badges.length && (
+            <ul id="badges" className="rounded-md bg-background/80 px-2 py-1 shadow-xs backdrop-blur-sm">
+              {snap.badges.map((b) => <li key={b}>{b}</li>)}
+            </ul>
+          )}
+          {!!map.attribution?.length && (
+            <p id="attribution" className="ml-auto rounded-md bg-background/80 px-2 py-1 shadow-xs backdrop-blur-sm">
+              {map.attribution.join(" · ")}
+            </p>
+          )}
+        </div>
       </div>
 
       <footer className="flex flex-wrap items-center gap-3 border-t px-3 py-2">
