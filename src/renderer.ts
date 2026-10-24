@@ -59,8 +59,12 @@ export interface Renderer {
   readonly state: Readonly<RenderState>;
   groups(): (ToggleGroup & { on: boolean })[];
   toggle(id: string, value?: boolean): void;
-  /** Pauses and jumps to `year`, clamped to the range. Returns the year it landed on. */
+  /**
+   * Pauses and jumps to `year`, clamped to the range. Returns the year it landed on.
+   * Before `ready` there is no range yet, so the year stays where it is.
+   */
   setYear(year: number): number;
+  /** Does nothing before `ready`. */
   play(): void;
   pause(): void;
   setSpeed(speed: number): void;
@@ -198,10 +202,12 @@ export function createRenderer({
     schedule();
   }
 
+  // The range stays empty ([Infinity, -Infinity]) until the plugins have loaded their data.
+  const hasRange = () => range[0] <= range[1];
   const atEnd = () => (state.speed > 0 ? state.year >= range[1] : state.year <= range[0]);
 
   function play() {
-    if (state.playing) return;
+    if (state.playing || !hasRange()) return;
     if (atEnd()) state.year = state.speed > 0 ? range[0] : range[1];
     state.playing = true;
     const id = ++run;
@@ -254,7 +260,7 @@ export function createRenderer({
     toggle(id, value = !on.has(id)) { if (value) on.add(id); else on.delete(id); schedule(); },
     setYear(year) {
       state.playing = false;
-      state.year = Math.max(range[0], Math.min(range[1], year));
+      if (hasRange()) state.year = Math.max(range[0], Math.min(range[1], year));
       schedule();
       return state.year;
     },
