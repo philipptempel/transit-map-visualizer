@@ -35,13 +35,17 @@ export function anchorStops(segments: Segment[], rank: (m: Mode) => number): Map
   return out;
 }
 
+/** Track points this close to a stop go: platforms are straight, and kinks there show up as steps. */
+export const STATION = 25;
+
 /**
  * Moves the ends of a track to the stops' points. Track points nearer to the new end than the old
- * end was lie in the station, behind the new end; they go, so the line does not double back.
+ * end was lie in the station, behind the new end; they go, so the line does not double back, and
+ * so do the points within `STATION` metres of it, whose small bends become steps in a bundle.
  */
 export function snapEnds(geo: LonLat[], from: LonLat, to: LonLat): LonLat[] {
   const trim = (pts: LonLat[], anchor: LonLat): LonLat[] => {
-    const r = metres(pts[0], anchor);
+    const r = Math.max(metres(pts[0], anchor), STATION);
     let i = 1;
     while (i < pts.length - 1 && metres(pts[i], anchor) <= r) i++;
     return [anchor, ...pts.slice(i)];

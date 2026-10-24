@@ -33,3 +33,11 @@ describe("snapEnds", () => {
     expect(snapEnds([[0, 0], [1, 1]], [0, 0.001], [1, 1.001])).toEqual([[0, 0.001], [1, 1.001]]);
   });
 });
+
+describe("snapEnds near stations", () => {
+  it("drops a small kink right beside the stop, which would show as a step in a bundle", () => {
+    // 13 m west, then away south-west: the 13 m point goes.
+    const track: LonLat[] = [[0, 0], [-0.000177, 0], [-0.003, -0.003], [-0.006, -0.006]];
+    expect(snapEnds(track, [0, 0], [-0.006, -0.006])).toEqual([[0, 0], [-0.003, -0.003], [-0.006, -0.006]]);
+  });
+});

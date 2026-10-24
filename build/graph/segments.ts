@@ -2,7 +2,7 @@
 // Segments that several routes share are merged, and list every line that runs on them.
 
 import type { LonLat, Mode, Segment } from "../../src/schema";
-import { lerp, projectOnto } from "./geo";
+import { lerp, metres, projectOnto } from "./geo";
 
 const same = (a: LonLat, b: LonLat) => a[0] === b[0] && a[1] === b[1];
 
@@ -55,13 +55,67 @@ export interface RouteForGraph {
   path: LonLat[][];                               // way geometries in member order
 }
 
+/** A line passes a stop without stopping if the stop lies this close to its track (metres)... */
+export const PASS_NEAR = 20;
+/** ...and not this close to either end of the stretch it is on. */
+const PASS_CLEAR = 30;
+
 /**
  * Segments from routes, in the order given. A segment points the way the first route through it
  * runs; later routes add their line to it. Geometry is cut from the track when both stops lie
  * within `snap` metres of it, otherwise the segment is left straight.
+ *
+ * Where a route runs past a stop of its own group without stopping (an express, or U11 skipping
+ * Berliner Platz (Hohe Straße)), its stretch is split there too, so it shares segments with the
+ * lines that do stop and is drawn beside them rather than on top. `group` says which modes count
+ * as one group (default: each mode on its own).
  */
-export function buildSegments(routes: RouteForGraph[], snap = 150): Segment[] {
+export function buildSegments(
+  routes: RouteForGraph[], snap = 150, group: (m: Mode) => string = (m) => m, stats = { passed: 0 },
+): Segment[] {
+  // Where each group's routes stop, on a coarse grid, to find stops that others pass.
+  const CELL = 0.002;   // degrees, about 150–220 m
+  const grid = new Map<string, { stop: string; geo: LonLat }[]>();
+  const cell = (p: LonLat) => `${Math.floor(p[0] / CELL)} ${Math.floor(p[1] / CELL)}`;
+  const seen = new Set<string>();
+  for (const r of routes) {
+    for (const s of r.stops) {
+      const k = `${group(r.mode)} ${s.stop} ${s.geo.join(",")}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      const c = `${group(r.mode)} ${cell(s.geo)}`;
+      grid.set(c, [...(grid.get(c) ?? []), s]);
+    }
+  }
+  const passed = (g: string, geo: LonLat[], a: string, b: string): { stop: string; at: At; along: number }[] => {
+    const lo = [Math.min(...geo.map((p) => p[0])), Math.min(...geo.map((p) => p[1]))];
+    const hi = [Math.max(...geo.map((p) => p[0])), Math.max(...geo.map((p) => p[1]))];
+    const len = geo.reduce((t, p, i) => (i ? t + metres(geo[i - 1], p) : 0), 0);
+    const out = new Map<string, { stop: string; at: At; along: number }>();
+    for (let x = Math.floor(lo[0] / CELL) - 1; x <= Math.floor(hi[0] / CELL) + 1; x++) {
+      for (let y = Math.floor(lo[1] / CELL) - 1; y <= Math.floor(hi[1] / CELL) + 1; y++) {
+        for (const c of grid.get(`${g} ${x} ${y}`) ?? []) {
+          if (c.stop === a || c.stop === b || out.has(c.stop)) continue;
+          const at = locate(geo, c.geo, { i: 0, t: 0, d: 0 });
+          if (at.d > PASS_NEAR) continue;
+          const along = geo.slice(0, at.i + 1).reduce((t, p, i) => (i ? t + metres(geo[i - 1], p) : 0), 0) + metres(geo[at.i], pointAt(geo, at));
+          if (along > PASS_CLEAR && len - along > PASS_CLEAR) out.set(c.stop, { stop: c.stop, at, along });
+        }
+      }
+    }
+    return [...out.values()].sort((p, q) => p.along - q.along);
+  };
+
   const byKey = new Map<string, Segment>();
+  const add = (a: string, b: string, mode: Mode, line: string, geo?: LonLat[]) => {
+    const key = `${mode}|${[a, b].sort().join("|")}`;
+    const seg = byKey.get(key);
+    if (!seg) byKey.set(key, { from: a, to: b, mode, lines: [line], ...(geo && { geo }) });
+    else {
+      if (!seg.lines!.includes(line)) seg.lines = [...(seg.lines as string[]), line].sort();
+      if (!seg.geo && geo) seg.geo = seg.from === a ? geo : [...geo].reverse();
+    }
+  };
   for (const r of routes) {
     const stops = r.stops.filter((s, i) => i === 0 || s.stop !== r.stops[i - 1].stop);
     const line = joinWays(r.path).flat().filter((p, i, all) => i === 0 || !same(p, all[i - 1]));
@@ -74,12 +128,17 @@ export function buildSegments(routes: RouteForGraph[], snap = 150): Segment[] {
       if (k > 0) {
         const a = stops[k - 1].stop, b = stops[k].stop;
         const geo = prev && onTrack ? slice(line, prev, here!) : undefined;
-        const key = `${r.mode}|${[a, b].sort().join("|")}`;
-        const seg = byKey.get(key);
-        if (!seg) byKey.set(key, { from: a, to: b, mode: r.mode, lines: [r.line], ...(geo && { geo }) });
+        if (!geo) add(a, b, r.mode, r.line);
         else {
-          if (!seg.lines!.includes(r.line)) seg.lines = [...(seg.lines as string[]), r.line].sort();
-          if (!seg.geo && geo) seg.geo = seg.from === a ? geo : [...geo].reverse();
+          // Split at the stops this stretch passes, cutting the track at each.
+          let from = a, start: At = { i: 0, t: 0, d: 0 };
+          for (const p of passed(group(r.mode), geo, a, b)) {
+            stats.passed++;
+            add(from, p.stop, r.mode, r.line, slice(geo, start, p.at));
+            from = p.stop;
+            start = p.at;
+          }
+          add(from, b, r.mode, r.line, from === a ? geo : slice(geo, start, { i: geo.length - 2, t: 1, d: 0 }));
         }
       }
       prev = onTrack ? here : null;

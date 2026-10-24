@@ -152,7 +152,9 @@ export function buildNetwork(osm: OsmIndex, cfg: MapConfig, year: number, budget
     stops: r.stops.filter((s) => candGeo.has(s)).map((s) => ({ stop: stopOf.get(s)!, geo: candGeo.get(s)! })),
     path: r.path,
   }));
-  let raw = buildSegments(forGraph);
+  const passing = { passed: 0 };
+  let raw = buildSegments(forGraph, 150, (m) => groupOfMode.get(m) ?? m, passing);
+  if (passing.passed) report.push(`stops passed without stopping, where segments were split: ${passing.passed}`);
 
   const geoOf = new Map(graphStops.map((s) => [s.id, s.geo] as const));
   if (cfg.clip === "bbox") {

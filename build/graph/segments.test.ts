@@ -95,3 +95,28 @@ describe("stopAxes", () => {
     expect(axes.has("far")).toBe(false);
   });
 });
+
+describe("buildSegments with lines that skip stops", () => {
+  // U1 stops at A, B and C on one straight track; U11 runs from A to C without stopping at B.
+  const track: LonLat[][] = [[[0, 0], [0.01, 0]]];
+  const routes: RouteForGraph[] = [
+    { line: "U1", mode: "light_rail", path: track, stops: [{ stop: "A", geo: [0, 0] }, { stop: "B", geo: [0.005, 0.00005] }, { stop: "C", geo: [0.01, 0] }] },
+    { line: "U11", mode: "light_rail", path: track, stops: [{ stop: "A", geo: [0, 0] }, { stop: "C", geo: [0.01, 0] }] },
+  ];
+
+  it("splits a stretch where it passes a stop of its group, so both lines share the segments", () => {
+    const stats = { passed: 0 };
+    const segs = buildSegments(routes, 150, (m) => m, stats);
+    expect(segs.map((s) => [s.from, s.to, s.lines])).toEqual([["A", "B", ["U1", "U11"]], ["B", "C", ["U1", "U11"]]]);
+    expect(segs[0].geo!.at(-1)![0]).toBeCloseTo(0.005, 9);   // cut where B lies on the track
+    expect(stats.passed).toBe(1);
+  });
+
+  it("does not split at stops of another group, or ones well off the track", () => {
+    expect(buildSegments([{ ...routes[0], mode: "bus" }, routes[1]]).map((s) => [s.mode, s.from, s.to])).toEqual([
+      ["bus", "A", "B"], ["bus", "B", "C"], ["light_rail", "A", "C"],
+    ]);
+    const far = { ...routes[0], stops: [routes[0].stops[0], { stop: "B", geo: [0.005, 0.001] as LonLat }, routes[0].stops[2]] };   // 110 m off
+    expect(buildSegments([far, routes[1]]).filter((s) => s.lines!.includes("U11")).map((s) => [s.from, s.to])).toEqual([["A", "C"]]);
+  });
+});

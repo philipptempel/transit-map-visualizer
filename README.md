@@ -115,7 +115,9 @@ the order is searched for one that satisfies as many junctions as it can. Each
 chain is turned so that at its junctions the lines that branch off already sit
 on the side their branch ends up on. Where a line starts or ends at a stop, the others keep
 their places at the stop and ease into their new ones along the next segment;
-at a junction, a branch's lines start where they sat in the bundle. A stop is
+at a junction, a branch's lines start where they sat in the bundle. Where two
+segments chain at a stop, every line turns the corner with a mitre join, so the
+outer lines meet up instead of stepping. A stop is
 drawn on its track, where its segments meet, rather than at the station
 building OSM may place it at. Like a web map, lines are drawn with as much detail
 as the zoom can show: each segment's geometry is simplified to half a pixel on
@@ -240,7 +242,9 @@ failed and 2 for bad arguments.
 The **network** stage queries Overpass for every route relation touching the
 bbox, classifies it, merges stops (a shared stop_area, or the same name within
 300 m, as long as their tracks run the same way: platforms on crossing streets
-stay two stops), cuts each segment's geometry from the track, simplifies it and writes
+stay two stops), cuts each segment's geometry from the track (splitting it
+where a line passes a stop of its group without stopping, so expresses share
+segments with the lines that stop), simplifies it and writes
 `network.json`. Each stop gets one point on its track, where all its
 segments end (rail decides over buses). `network.json` carries coarse
 geometry (15 m for a city) for the overview and the first paint;
