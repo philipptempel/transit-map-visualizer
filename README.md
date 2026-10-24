@@ -117,7 +117,11 @@ on the side their branch ends up on. Where a line starts or ends at a stop, the 
 their places at the stop and ease into their new ones along the next segment;
 at a junction, a branch's lines start where they sat in the bundle. Where two
 segments chain at a stop, every line turns the corner with a mitre join, so the
-outer lines meet up instead of stepping. A stop is
+outer lines meet up instead of stepping. Lines that all share a colour (Stuttgart's buses are
+all SSB red) cannot be told apart side by side, so they are drawn as one stroke,
+a little wider the more lines it carries; groups that fade in schematic view,
+the buses, are drawn thinner than rail. Strokes are drawn in batches by colour
+and width, and segments off screen are skipped. A stop is
 drawn on its track, where its segments meet, rather than at the station
 building OSM may place it at. Like a web map, lines are drawn with as much detail
 as the zoom can show: each segment's geometry is simplified to half a pixel on

@@ -20,6 +20,7 @@ interface Seg {
   gp: Point[]; sp: Point[];        // the whole geometry, projected: geographic and schematic
   lod: Map<number, Point[]>[];     // [geographic, schematic] simplified per zoom level, built as needed
   morph: Map<number, [Point[], Point[]]>;   // both resampled to one count per zoom level, for the morph
+  box: [x0: number, y0: number, x1: number, y1: number];   // around both layouts, to skip what is off screen
 }
 
 /** Zoom levels the geometry is simplified for: 2^-1 = 0.5× up to 2^6 = 64×. */
@@ -33,6 +34,12 @@ export interface NetworkOptions {
   minorLabelZoom?: number;
   /** Pixels a bundle of parallel lines may take at zoom 1; wider ones merge into one stroke until zoomed in. */
   bundleWidth?: number;
+}
+
+function bounds(pts: Point[]): Seg["box"] {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+  return [x0, y0, x1, y1];
 }
 
 const mix = (a: Point[], b: Point[], m: number): Point[] =>
@@ -145,6 +152,7 @@ export function network({
         i, from, to, start: raw.start, end: raw.end, flipped, group, lines,
         gp: geo.map(P), sp: sch.map(P),
         lod: [new Map(), new Map()], morph: new Map(),
+        box: bounds([...geo, ...sch].map(P)),
       }];
     });
     atStop = new Map();
@@ -285,35 +293,61 @@ export function network({
         return end ? p[1] : p[p.length - 2];
       };
 
+      // Strokes are collected by colour, width and opacity and drawn a path at a time: far fewer
+      // canvas calls than one per line per segment. Merged strokes go underneath the separate lines.
+      const under = new Map<string, Path2D>(), over = new Map<string, Path2D>();
+      const add = (layer: Map<string, Path2D>, color: string, width: number, alpha: number, pts: Point[]) => {
+        const key = `${color}|${width.toFixed(3)}|${alpha.toFixed(2)}`;
+        let path = layer.get(key);
+        if (!path) layer.set(key, (path = new Path2D()));
+        pts.forEach(([x, y], k) => (k ? path!.lineTo(x, y) : path!.moveTo(x, y)));
+      };
+      // What is on screen, in map units, with room for the widest bundle.
+      const pad = ctx.px(40);
+      const view = [-state.t.x / state.t.k - pad, -state.t.y / state.t.k - pad,
+        (state.width - state.t.x) / state.t.k + pad, (state.height - state.t.y) / state.t.k + pad];
+
       for (const { s, life, vis, strands } of shown.values()) {
-        // In between the two ends, each line eases from its place at one to its place at the other.
-        const d0 = layout(s, 0), d1 = layout(s, 1);
-        const full = pathOf(s), before = across(s, 0), after = across(s, 1);
-        const t = along(full);
-        const f = fan.get(s.group.id) ?? 1;
-        const ends = strands.map((l) => [(l.id && d0.get(l.id)) || 0, (l.id && d1.get(l.id)) || 0] as const);
-        const stroke = (color: string, a: number, b: number, alpha: number) => {
-          const pts = offset(full, (k) => f * (a + (b - a) * ease(t[k])), before, after);
-          // Grow from the segment's own `from`; cut a flipped one from the far end and turn it back.
-          const path = s.flipped ? cutAt(pts.reverse(), life.grow).reverse() : cutAt(pts, life.grow);
-          g.globalAlpha = alpha;
-          g.strokeStyle = color;
-          g.beginPath();
-          path.forEach(([x, y], k) => (k ? g.lineTo(x, y) : g.moveTo(x, y)));
-          g.stroke();
-        };
-        // Merged: one stroke down the middle, in the lines' colour if they share one. It fades as they fan out.
-        if (f < 1 && strands.length > 1) {
-          const color = strands.every((l) => l.color === strands[0].color) ? strands[0].color : s.group.color;
-          const mid = (j: 0 | 1) => ends.reduce((sum, e) => sum + e[j], 0) / ends.length;
-          stroke(color, mid(0), mid(1), life.alpha * vis * (1 - f));
+        const [x0, y0, x1, y1] = s.box;
+        if (x1 < view[0] || x0 > view[2] || y1 < view[1] || y0 > view[3]) continue;
+        // Groups that fade in schematic view (the buses) are drawn thinner, so rail leads the eye.
+        const base = ctx.px(lineWidth) * (s.group.schematic ? 1 : 0.6);
+        const alpha = life.alpha * vis;
+        const full = pathOf(s);
+        const grown = (pts: Point[]) => (s.flipped ? cutAt(pts.reverse(), life.grow).reverse() : cutAt(pts, life.grow));
+        // Lines that all share a colour cannot be told apart side by side: one stroke down the
+        // middle, a little wider the more lines it carries.
+        if (strands.every((l) => l.color === strands[0].color)) {
+          const width = base * Math.min(2.2, 0.7 + 0.3 * Math.sqrt(strands.length));
+          add(over, strands[0].color, width, alpha, grown([...full]));
+        } else {
+          // In between the two ends, each line eases from its place at one to its place at the other.
+          const d0 = layout(s, 0), d1 = layout(s, 1);
+          const before = across(s, 0), after = across(s, 1);
+          const t = along(full);
+          const f = fan.get(s.group.id) ?? 1;
+          const ends = strands.map((l) => [(l.id && d0.get(l.id)) || 0, (l.id && d1.get(l.id)) || 0] as const);
+          const shifted = (a: number, b: number) => grown(offset(full, (k) => f * (a + (b - a) * ease(t[k])), before, after));
+          // Merged: one stroke down the middle in the group's colour, fading as the lines fan out.
+          if (f < 1) {
+            const mid = (j: 0 | 1) => ends.reduce((sum, e) => sum + e[j], 0) / ends.length;
+            add(under, s.group.color, base, alpha * (1 - f), shifted(mid(0), mid(1)));
+          }
+          if (f > 0) strands.forEach((l, j) => add(over, l.color, base, alpha * f, shifted(ends[j][0], ends[j][1])));
         }
-        const each = strands.length > 1 ? f : 1;
-        if (each > 0) strands.forEach((l, j) => stroke(l.color, ends[j][0], ends[j][1], life.alpha * vis * each));
-        if (life.alpha * vis > 0.5) {
+        if (alpha > 0.5) {
           const [head, tail] = s.flipped ? [s.to, s.from] : [s.from, s.to];
           touched.add(head);
           if (life.grow >= 1) touched.add(tail);
+        }
+      }
+      for (const layer of [under, over]) {
+        for (const [key, path] of layer) {
+          const [color, width, alpha] = key.split("|");
+          g.globalAlpha = Number(alpha);
+          g.strokeStyle = color;
+          g.lineWidth = Number(width);
+          g.stroke(path);
         }
       }
 
